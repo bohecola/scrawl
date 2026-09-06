@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMediaQuery } from './useMediaQuery'
 
-const COLLAPSED_KEY = 'jotter:sidebarCollapsed'
+const COLLAPSED_KEY = 'scrawl:sidebarCollapsed'
 
 /**
  * 侧栏收起 / 展开。状态放在 App 里而不是 Sidebar 里：开关按钮在顶栏上，

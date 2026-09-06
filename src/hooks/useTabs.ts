@@ -5,7 +5,7 @@ import type { T } from '@/i18n/context'
 import type { ActiveFile } from '@/types'
 
 /** 上次激活的文件，刷新后接上 */
-export const ACTIVE_KEY = 'jotter:activeKey'
+export const ACTIVE_KEY = 'scrawl:activeKey'
 
 interface UseTabsOptions {
   editorRef: RefObject<EditorHandle | null>

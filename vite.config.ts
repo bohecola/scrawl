@@ -24,11 +24,11 @@ function injectLangTable(): Plugin {
     }),
   )
   return {
-    name: 'jotter:inject-lang-table',
+    name: 'scrawl:inject-lang-table',
     transformIndexHtml(html) {
       return html
-        .replace('__JOTTER_LANG_TAGS__', JSON.stringify(LANG_TAGS))
-        .replace('__JOTTER_TITLES__', JSON.stringify(titles))
+        .replace('__SCRAWL_LANG_TAGS__', JSON.stringify(LANG_TAGS))
+        .replace('__SCRAWL_TITLES__', JSON.stringify(titles))
     },
   }
 }

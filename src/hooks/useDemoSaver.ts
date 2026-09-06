@@ -15,7 +15,7 @@ import { messageOf, type T } from '@/i18n/context'
 import type { Notice } from '@/types'
 
 /** 「把全部 Demo 存到本地」时建的总目录名。纯 ASCII，跨系统都安全 */
-const DEMOS_DIR = 'jotter-demos'
+const DEMOS_DIR = 'scrawl-demos'
 
 interface UseDemoSaverOptions {
   workspace: Workspace

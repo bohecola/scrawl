@@ -51,7 +51,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   tabIcons: true,
 }
 
-export const STORAGE_KEY = 'jotter:editor'
+export const STORAGE_KEY = 'scrawl:editor'
 
 function isFontPreset(v: unknown): v is FontPresetId {
   return FONT_PRESETS.some((p) => p.id === v)

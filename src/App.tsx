@@ -556,7 +556,7 @@ function App() {
     fileInputRef.current?.click()
   }
 
-  // 复制条目的应用内相对路径（如 `test/jotter-demos`）。浏览器拿不到真实绝对路径，
+  // 复制条目的应用内相对路径（如 `test/scrawl-demos`）。浏览器拿不到真实绝对路径，
   // 所以只能给这个；用户可自行在资源管理器 / Finder 里按路径定位。
   function handleCopyPath(path: string) {
     const label = workspace.displayPath(path)

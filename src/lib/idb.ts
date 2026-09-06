@@ -11,18 +11,58 @@
 
 import { AppError } from './app-error'
 
-const DB_NAME = 'jotter'
+const DB_NAME = 'scrawl'
+/** 改名前的库名；第一次打开新库时把里面的东西搬过来，老用户的目录授权和未命名文件不丢 */
+const LEGACY_DB_NAME = 'jotter'
 const DB_VERSION = 1
 const STORE = 'kv'
 
 let dbPromise: Promise<IDBDatabase> | null = null
+
+/** 读出旧库 kv 里的全部键值；旧库不存在或打不开就是空 */
+function readLegacy(): Promise<[IDBValidKey, unknown][]> {
+  return new Promise((resolve) => {
+    // 不能用 indexedDB.open 去「探测」：它会顺手把不存在的库建出来。Chromium 有 databases()
+    const dbs = indexedDB.databases?.()
+    if (!dbs) return resolve([])
+    dbs
+      .then((list) => {
+        if (!list.some((d) => d.name === LEGACY_DB_NAME)) return resolve([])
+        const req = indexedDB.open(LEGACY_DB_NAME)
+        req.onerror = () => resolve([])
+        req.onsuccess = () => {
+          const db = req.result
+          if (!db.objectStoreNames.contains(STORE)) {
+            db.close()
+            return resolve([])
+          }
+          const store = db.transaction(STORE, 'readonly').objectStore(STORE)
+          const keysReq = store.getAllKeys()
+          const valsReq = store.getAll()
+          valsReq.onsuccess = () => {
+            const keys = keysReq.result
+            const vals = valsReq.result as unknown[]
+            db.close()
+            resolve(keys.map((k, i) => [k, vals[i]]))
+          }
+          valsReq.onerror = () => {
+            db.close()
+            resolve([])
+          }
+        }
+      })
+      .catch(() => resolve([]))
+  })
+}
 
 function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise
 
   const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = () => {
+    let fresh = false
+    req.onupgradeneeded = (e) => {
+      fresh = e.oldVersion === 0
       if (!req.result.objectStoreNames.contains(STORE)) {
         req.result.createObjectStore(STORE)
       }
@@ -37,6 +77,29 @@ function openDb(): Promise<IDBDatabase> {
       }
       db.onclose = () => {
         if (dbPromise === opening) dbPromise = null
+      }
+      // 新库第一次建出来：把改名前那个库（jotter）里的东西搬过来，搬完把旧库删掉。
+      // 搬完才 resolve —— 第一次读目录 / 未命名文件必须看到搬过来的数据，否则这一次会话
+      // 会以空状态启动、再把空状态写回去盖掉旧数据。只在 fresh 时做一次
+      if (fresh) {
+        readLegacy()
+          .then(
+            (rows) =>
+              new Promise<void>((done) => {
+                if (rows.length === 0) return done()
+                const tx = db.transaction(STORE, 'readwrite')
+                const store = tx.objectStore(STORE)
+                for (const [k, v] of rows) store.put(v, k)
+                tx.oncomplete = () => {
+                  indexedDB.deleteDatabase(LEGACY_DB_NAME)
+                  done()
+                }
+                tx.onerror = () => done()
+                tx.onabort = () => done()
+              })
+          )
+          .then(() => resolve(db))
+        return
       }
       resolve(db)
     }

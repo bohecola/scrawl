@@ -1,8 +1,8 @@
-# Jotter
+# Scrawl
 
 > English | [中文](./README.zh-CN.md)
 
-**Jotter** is an online scratchpad for running JavaScript and TypeScript code. Write a snippet, hit run, and see the console output immediately.
+**Scrawl** is an online scratchpad for running JavaScript and TypeScript code. Write a snippet, hit run, and see the console output immediately.
 
 ## Features
 
@@ -16,7 +16,7 @@
 | Multilingual UI | 11 interface languages (including right-to-left layout for Arabic), following the system language by default and switchable in settings. |
 | Themes | Dark / light following the system or set by hand, plus 7 accent colors. |
 
-> Note: Jotter is a code scratchpad — it runs JavaScript / TypeScript and shows console output. It is **not** an HTML / CSS live preview tool.
+> Note: Scrawl is a code scratchpad — it runs JavaScript / TypeScript and shows console output. It is **not** an HTML / CSS live preview tool.
 
 ## Tech Stack
 
@@ -52,4 +52,4 @@ pnpm lint    # code linting (--max-warnings 0; any warning fails)
 
 Online playground: [playground.deore.me](https://playground.deore.me/)
 
-![Jotter UI preview](/src/assets/imgs/preview.png?v=5)
+![Scrawl UI preview](/src/assets/imgs/preview.png?v=5)

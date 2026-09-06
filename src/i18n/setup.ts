@@ -3,7 +3,7 @@
 
   英文静态打包（它是回退语言，必须随时在）；其他语言用 Vite 的 import.meta.glob
   懒加载，addResourceBundle 挂上，一种语言一个 chunk。语言探测与持久化（system 模式、
-  jotter:lang、index.html 首帧脚本）不在这里，见 context.ts 与 main.tsx。
+  scrawl:lang、index.html 首帧脚本）不在这里，见 context.ts 与 main.tsx。
 */
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'

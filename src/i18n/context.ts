@@ -31,9 +31,9 @@ export type LangMode = Lang | 'system'
 
 /*
   与 index.html 首帧脚本里的键名一致，改这里要一起改那边。
-  主题那支键还是历史遗留的 'playground-theme'，新键跟 jotter:* 一族对齐。
+  主题那支键还是历史遗留的 'playground-theme'，新键跟 scrawl:* 一族对齐。
 */
-export const STORAGE_KEY = 'jotter:lang'
+export const STORAGE_KEY = 'scrawl:lang'
 
 /** react-i18next 给的 t，键名受 i18next.d.ts 的 CustomTypeOptions 约束。 */
 export type T = TFunction<'translation'>

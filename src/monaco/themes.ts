@@ -106,7 +106,7 @@ export const EDITOR_THEMES: readonly EditorThemeMeta[] = [
   { id: 'dracula', label: 'Dracula', kind: 'dark' },
   { id: 'monokai', label: 'Monokai', kind: 'dark' },
   { id: 'hc-black', label: 'High Contrast Dark', kind: 'dark' },
-  { id: 'playground-light', label: 'Light (Jotter)', kind: 'light' },
+  { id: 'playground-light', label: 'Light (Scrawl)', kind: 'light' },
   { id: 'github-light', label: 'GitHub Light', kind: 'light' },
   { id: 'solarized-light', label: 'Solarized Light', kind: 'light' },
   { id: 'hc-light', label: 'High Contrast Light', kind: 'light' },

@@ -28,7 +28,7 @@ self.MonacoEnvironment = {
 }
 
 /** 编辑器里每个文件（key）对应的 model URI。Editor 建 model、compile 找 model 都用它 */
-export const modelUri = (key: string) => monaco.Uri.parse(`inmemory://jotter/${encodeURIComponent(key)}`)
+export const modelUri = (key: string) => monaco.Uri.parse(`inmemory://scrawl/${encodeURIComponent(key)}`)
 
 /*
   编辑器现在同时打开多个文件（每个文件一个 model），这会踩到 TS 语言服务的一个默认行为：

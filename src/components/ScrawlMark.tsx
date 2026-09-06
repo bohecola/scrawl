@@ -1,5 +1,5 @@
 /*
-  Jotter 自己的标记：一笔随手划出来的涂鸦。
+  Scrawl 自己的标记：一笔随手划出来的涂鸦。
 
   之前是一页折角的草稿纸加两行字和一根光标，三个元素在 16px 下糊成一团色块，
   折角页本身又是「文档」类图标的通用形状。现在只留一笔：像蜡笔在纸上划的一道波浪，
@@ -14,16 +14,16 @@
   与 GithubMark 一样是真 svg（不是图标插件那种 mask <span>），所以 shadcn 组件里的
   [&_svg] 规则对它有效。
 */
-export function JotterMark({ className }: { className?: string }) {
+export function ScrawlMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true" focusable="false" className={className}>
-      <linearGradient id="jotter-mark" x1="7" y1="4" x2="25" y2="28" gradientUnits="userSpaceOnUse">
+      <linearGradient id="scrawl-mark" x1="7" y1="4" x2="25" y2="28" gradientUnits="userSpaceOnUse">
         <stop stopColor="var(--logo-hi)" />
         <stop offset="1" stopColor="var(--logo-lo)" />
       </linearGradient>
       <path
         fill="none"
-        stroke="url(#jotter-mark)"
+        stroke="url(#scrawl-mark)"
         strokeWidth="4.2"
         strokeLinecap="round"
         strokeLinejoin="round"

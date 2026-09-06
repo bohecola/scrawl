@@ -4,15 +4,37 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jotter · JS / TS 代码草稿纸</title>
+    <title>Scrawl · JS / TS 代码草稿纸</title>
     <script>
+      /*
+        改名迁移：项目原来叫 Jotter，localStorage 里的键都是 jotter:* 开头。
+        在任何读取之前把它们改成 scrawl:*，老用户的语言、侧栏宽度、上次打开的文件都保得住。
+        放在首帧脚本最前面是因为下面马上就要读 scrawl:lang；IndexedDB 那边的库名迁移在 src/lib/idb.ts。
+      */
+      (function () {
+        try {
+          var keys = []
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i)
+            if (k && k.indexOf('jotter:') === 0) keys.push(k)
+          }
+          for (var j = 0; j < keys.length; j++) {
+            var nk = 'scrawl:' + keys[j].slice('jotter:'.length)
+            if (localStorage.getItem(nk) === null) localStorage.setItem(nk, localStorage.getItem(keys[j]))
+            localStorage.removeItem(keys[j])
+          }
+        } catch (e) {
+          /* 隐私模式下 localStorage 可能抛错，没什么可迁移的 */
+        }
+      })()
+
       /*
         首帧之前定下主题：React 挂载前 <html> 上没有 data-theme，
         会先按系统配色画一帧再跳变（默认是深色模式，浅色系统上就闪一下白）。
         这里同步读一次 localStorage 把 data-theme 补上。
         键名与默认值需与 src/theme/index.tsx 的 STORAGE_KEY / getInitialMode 保持一致。
       */
-      (function () {
+      ;(function () {
         var theme = 'dark'
         try {
           var saved = localStorage.getItem('playground-theme')
@@ -47,17 +69,17 @@
         标签页、辅助技术、拼写检查都看它们），英文用户不该先看到一帧中文标题。
 
         语言表与各语言标题由 vite.config.ts 里的插件从 src/i18n/langs.ts 与各字典注入
-        （下面两个 __JOTTER_*__ 占位符），这里不再手抄一份。
+        （下面两个 __SCRAWL_*__ 占位符），这里不再手抄一份。
         「按系统语言归位」的规则与 langs.ts 的 langFromTag 一致：中文按地区分简繁，其余按主语言码。
         <html dir> 也在这里先定（阿拉伯语 rtl），否则 RTL 会闪一帧错方向。
         标题由运行期 dict 里的 html.title 兜底精确覆盖，这里只求首帧方向/语言不错。
       */
       ;(function () {
-        var LANG_TAGS = __JOTTER_LANG_TAGS__
-        var TITLES = __JOTTER_TITLES__
+        var LANG_TAGS = __SCRAWL_LANG_TAGS__
+        var TITLES = __SCRAWL_TITLES__
         var mode = 'system'
         try {
-          var saved = localStorage.getItem('jotter:lang')
+          var saved = localStorage.getItem('scrawl:lang')
           if (saved === 'system' || (saved && Object.prototype.hasOwnProperty.call(LANG_TAGS, saved))) mode = saved
         } catch (e) {
           /* 隐私模式下 localStorage 可能抛错，退回跟随系统 */
@@ -76,7 +98,7 @@
         var attr = LANG_TAGS[lang] || 'en'
         document.documentElement.lang = attr
         document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
-        document.title = TITLES[attr] || 'Jotter · JS / TS'
+        document.title = TITLES[attr] || 'Scrawl · JS / TS'
       })()
     </script>
   </head>

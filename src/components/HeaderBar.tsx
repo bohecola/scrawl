@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { GithubMark } from './GithubMark'
-import { JotterMark } from './JotterMark'
+import { ScrawlMark } from './ScrawlMark'
 import { SettingsDialog } from './SettingsDialog'
 import { useI18n } from '@/i18n/context'
 import { cn } from '@/lib/utils'
@@ -37,8 +37,8 @@ export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImp
         />
       </Button>
       <div className="flex items-center gap-2 text-base font-semibold">
-        <JotterMark className="size-5" />
-        Jotter
+        <ScrawlMark className="size-5" />
+        Scrawl
       </div>
 
       {/* 「新建」挪到文件栏的标题行上去了：它和那边的「新建文件 / 新建文件夹」是一类事，
@@ -68,7 +68,7 @@ export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImp
           title={t('header.github')}
         >
           <a
-            href="https://github.com/bohecola/jotter"
+            href="https://github.com/bohecola/scrawl"
             target="_blank"
             rel="noopener noreferrer"
             aria-label={t('header.github')}

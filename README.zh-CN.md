@@ -1,8 +1,8 @@
-# Jotter
+# Scrawl
 
 > [English](./README.md) | 中文
 
-**Jotter** 是一个在线运行 JavaScript / TypeScript 代码的草稿纸。写一段代码，点一下运行，立刻在右侧 Console 看到输出。
+**Scrawl** 是一个在线运行 JavaScript / TypeScript 代码的草稿纸。写一段代码，点一下运行，立刻在右侧 Console 看到输出。
 
 ## 特性
 
@@ -16,7 +16,7 @@
 | 多语言 | 界面提供 11 种语言（含阿拉伯语的从右到左布局），默认跟随系统，在设置里切换。 |
 | 主题 | 深色 / 浅色跟随系统或手动指定，另有 7 种配色可选。 |
 
-> 说明：Jotter 是代码草稿纸，只运行 JavaScript / TypeScript 并展示 Console 输出，**不是** HTML / CSS 实时预览器。
+> 说明：Scrawl 是代码草稿纸，只运行 JavaScript / TypeScript 并展示 Console 输出，**不是** HTML / CSS 实时预览器。
 
 ## 技术栈
 
@@ -52,4 +52,4 @@ pnpm lint    # 代码检查（--max-warnings 0，任何告警都会失败）
 
 在线地址：[playground.deore.me](https://playground.deore.me/)
 
-![Jotter 界面预览](/src/assets/imgs/preview.png?v=5)
+![Scrawl 界面预览](/src/assets/imgs/preview.png?v=5)

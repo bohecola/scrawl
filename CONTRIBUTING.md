@@ -1,6 +1,6 @@
 # Contributing translations
 
-Jotter's UI copy lives in `src/locales/*.json` in [i18next JSON v4](https://www.i18next.com/misc/json-format) format (flat keys, the dots in key names are just naming convention, not nesting).
+Scrawl's UI copy lives in `src/locales/*.json` in [i18next JSON v4](https://www.i18next.com/misc/json-format) format (flat keys, the dots in key names are just naming convention, not nesting).
 
 ## Where to change copy
 

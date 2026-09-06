@@ -33,17 +33,17 @@ import type { Draft, FileDraft } from '@/hooks/useFileDraft'
   需要拖，而引入它意味着把编辑器/控制台那套本来没人抱怨的 flex 布局也一起改掉。
 */
 
-const WIDTH_KEY = 'jotter:sidebarWidth'
+const WIDTH_KEY = 'scrawl:sidebarWidth'
 /**
  * Demo 那一段的展开状态。
  *
- * 键名从 `jotter:templatesCollapsed` 换成了这个，不是为了好看：那一版的默认值是「展开」，
+ * 键名从 `scrawl:templatesCollapsed` 换成了这个，不是为了好看：那一版的默认值是「展开」，
  * 而持久化的 effect 每次挂载都会写一遍，于是所有老用户本地都存着「展开」——
  * 沿用同一个键的话，「默认收起」这件事对他们永远不会生效。
  */
-const TEMPLATES_KEY = 'jotter:templatesOpen'
+const TEMPLATES_KEY = 'scrawl:templatesOpen'
 /** 上一版的键。语义正好相反，留在 localStorage 里只会让人读错，见一次清一次。 */
-const LEGACY_TEMPLATES_KEY = 'jotter:templatesCollapsed'
+const LEGACY_TEMPLATES_KEY = 'scrawl:templatesCollapsed'
 const MIN_WIDTH = 180
 const MAX_WIDTH = 480
 const DEFAULT_WIDTH = 264

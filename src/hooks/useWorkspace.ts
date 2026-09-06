@@ -63,7 +63,7 @@ import {
 const IDB_KEY = 'workspace-roots'
 /** 单目录时代的存法：值就是一个裸 handle。只在迁移的时候读一次。 */
 const LEGACY_IDB_KEY = 'workspace-root'
-const EXPANDED_KEY = 'jotter:expanded'
+const EXPANDED_KEY = 'scrawl:expanded'
 
 /**
  * 目录改名的体量闸门。浏览器没有目录改名 API，那件事实际是「整棵复制 + 删原目录」，
@@ -162,12 +162,12 @@ export interface InterruptedSave {
   totalFiles: number
 }
 /** 进行中记录的键。保存完成会删掉，中途刷新/失败会留下，下次打开能发现。 */
-export const DEMO_SAVE_KEY = 'jotter:interruptedDemoSave'
+export const DEMO_SAVE_KEY = 'scrawl:interruptedDemoSave'
 /**
  * sessionStorage 里的「正在保存」标记。IndexedDB 记录虽然可靠，但写入事务提交和
  * 刷新之间仍存在极小竞态窗口；这个同步标记能保证同标签页刷新后第一次加载就读到。
  */
-export const DEMO_SAVING_KEY = 'jotter:saving'
+export const DEMO_SAVING_KEY = 'scrawl:saving'
 
 export interface BundleResult {
   /** 总目录的路径（`<根 id>/<目录名>`）。它已经被展开并设为新建目标了 */
@@ -181,9 +181,9 @@ export interface BundleResult {
 
 /** 主动在已打开的目录里检测到的「上次没存完」残留。 */
 export interface ResidualDemo {
-  /** 可读路径（`父文件夹/jotter-demos`） */
+  /** 可读路径（`父文件夹/scrawl-demos`） */
   label: string
-  /** 残留目录名（如 `jotter-demos`），用于删除 */
+  /** 残留目录名（如 `scrawl-demos`），用于删除 */
   dirName: string
 }
 
@@ -252,7 +252,7 @@ export interface Workspace {
   renameEntry: (entry: Entry, name: string) => Promise<Entry | null>
   /**
    * 在一个已授权的根目录里，主动找「上次没存完」的 demo 残留（含 .crswap 交换文件的
-   * jotter-demos* 目录）。不依赖 IndexedDB 记录，直接看磁盘。
+   * scrawl-demos* 目录）。不依赖 IndexedDB 记录，直接看磁盘。
    */
   detectResidualDemos: (root: WorkspaceRoot) => Promise<ResidualDemo[]>
   /** 按路径找回文件 handle：重开页面恢复上次打开的文件时，手里只有一个字符串 */
@@ -866,7 +866,7 @@ export function useWorkspace(): Workspace {
     [liveRootOf]
   )
 
-  // 在一个已授权的根目录里找 demo 残留：列根目录顶层，挑出 jotter-demos* 目录，
+  // 在一个已授权的根目录里找 demo 残留：列根目录顶层，挑出 scrawl-demos* 目录（改名前存的 jotter-demos* 也认），
   // 再看里面有没有 .crswap（createWritable 写入中断留下的交换文件，完整保存不会有）。
   const detectResidualDemos = useCallback(
     async (root: WorkspaceRoot): Promise<ResidualDemo[]> => {
@@ -875,7 +875,7 @@ export function useWorkspace(): Workspace {
         const top = await listDirectory(root.handle, root.id)
         const demoDirs = top.entries.filter(
           (e): e is DirEntry =>
-            e.kind === 'directory' && /^jotter-demos(-[0-9]+)?$/.test(e.name)
+            e.kind === 'directory' && /^(scrawl|jotter)-demos(-[0-9]+)?$/.test(e.name)
         )
         const found: ResidualDemo[] = []
         for (const dir of demoDirs) {

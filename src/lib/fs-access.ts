@@ -74,7 +74,7 @@ export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null>
   try {
     // mode: 'readwrite' —— 一次就把读写都要到手。分两次申请会弹两次授权，
     // 体验更差；有了写权限 Ctrl+S 才能直接落盘。
-    return await window.showDirectoryPicker({ id: 'jotter-workspace', mode: 'readwrite' })
+    return await window.showDirectoryPicker({ id: 'scrawl-workspace', mode: 'readwrite' })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') return null
     throw err
@@ -200,7 +200,7 @@ export interface LoadedFile {
   lastModified: number
   /**
    * 推断出的文件编码，只在底部状态栏展示用（VS Code 式）。
-   * 注意：Jotter 解码/写回固定走 UTF-8，这里只是「这个文件本来是什么编码」的标签，
+   * 注意：Scrawl 解码/写回固定走 UTF-8，这里只是「这个文件本来是什么编码」的标签，
    * 并不改变读写行为 —— 有 BOM 的 UTF-16 文件读进来仍是按 UTF-8 解、会乱码，
    * 只是状态栏能如实告诉你它的真实编码。
    */
