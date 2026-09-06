@@ -1,4 +1,4 @@
-import { useState, type ReactNode, useEffect } from 'react'
+import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import {
@@ -23,7 +23,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
-import { useI18n, LANGS, type LangMode } from '@/i18n/context'
+import { useI18n, LANGS, systemLang, translatedLangNames, type LangMode } from '@/i18n/context'
 import type { ParseKeys } from 'i18next'
 import { useTheme, type Accent, type ThemeMode, ACCENTS } from '@/theme/index'
 import {
@@ -248,8 +248,19 @@ function Stepper({
   )
 }
 
+/** 语言项后面的次要文字。Radix 会把选中项的内容整个复制进触发器，触发器窄，那里只留主名字 */
+function LangHint({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-[var(--text-muted)] [[data-slot=select-trigger]_&]:hidden">{children}</span>
+  )
+}
+
 export function SettingsDialog() {
-  const { t, mode: langMode, setMode: setLangMode } = useI18n()
+  const { t, lang, mode: langMode, setMode: setLangMode } = useI18n()
+  // 语言下拉各项后面的括注（当前界面语言写的语言名）；「跟随系统」后面注明系统语言解析成了哪一种
+  const langNames = useMemo(() => translatedLangNames(lang), [lang])
+  const sysLang = systemLang()
+  const sysLangName = langNames[sysLang] ?? LANGS.find((l) => l.value === sysLang)?.label
   const { mode, setMode, accent, setAccent } = useTheme()
   const { settings, update, reset } = useSettings()
   const [tab, setTab] = useState<Tab>('appearance')
@@ -426,11 +437,13 @@ export function SettingsDialog() {
                           <SelectItem value="system">
                             <Icon className="icon-[lucide--monitor]" />
                             {t('header.lang.system')}
+                            {sysLangName && <LangHint>{sysLangName}</LangHint>}
                           </SelectItem>
                           <SelectSeparator />
                           {LANGS.map(({ value, label }) => (
                             <SelectItem key={value} value={value}>
                               {label}
+                              {langNames[value] && <LangHint>{langNames[value]}</LangHint>}
                             </SelectItem>
                           ))}
                         </SelectContent>

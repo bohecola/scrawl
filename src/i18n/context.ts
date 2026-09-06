@@ -64,6 +64,28 @@ interface I18nContextValue {
   t: T
 }
 
+/**
+ * 语言下拉里每项后面的括注：用当前界面语言写的该语言名（中文界面下 Deutsch 后面跟「德语」）。
+ * 交给浏览器的 Intl.DisplayNames，不用自己维护 11×11 张互译表。
+ * 与母语名相同的（英文界面下的 English）不返回，界面上不重复显示。
+ * 简中按 zh-Hans 查而不是 zh-CN：后者得到的是「中文（中国）」。
+ */
+export function translatedLangNames(ui: Lang): Partial<Record<Lang, string>> {
+  const names: Partial<Record<Lang, string>> = {}
+  if (typeof Intl.DisplayNames !== 'function') return names
+  let dn: Intl.DisplayNames
+  try {
+    dn = new Intl.DisplayNames([LANG_TAGS[ui]], { type: 'language' })
+  } catch {
+    return names
+  }
+  for (const { value, label } of LANGS) {
+    const name = dn.of(value === 'zh' ? 'zh-Hans' : LANG_TAGS[value])
+    if (name && name.localeCompare(label, undefined, { sensitivity: 'base' }) !== 0) names[value] = name
+  }
+  return names
+}
+
 /** 阿拉伯语从右往左，其余从左往右。 */
 export function dirOf(lang: Lang): 'rtl' | 'ltr' {
   return lang === 'ar' ? 'rtl' : 'ltr'
