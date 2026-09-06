@@ -1227,7 +1227,9 @@ export default function Sidebar({
         {templatesOpen &&
           groups.map(({ dir, items }) => (
             <div key={dir}>
-              <div className="px-2 py-0.5 font-mono text-[12px] text-[var(--text-muted)]">{dir}</div>
+              {/* 分组名和「Demo 片段」四个字对齐（越过标题上那个 12px 箭头和 4px 间距）：
+                  它们是这一段的子目录，不能比根的文字还靠左 */}
+              <div className="py-0.5 pe-2 ps-6 font-mono text-[12px] text-[var(--text-muted)]">{dir}</div>
               <ul>
                 {items.map((item) => {
                   const key = `builtin:${item.path}`
