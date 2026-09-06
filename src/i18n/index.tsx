@@ -67,15 +67,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [lang])
 
   /*
-    <html lang>、标题与排版方向。运行期只由这里写，别处不要碰 document.title。
-    排版方向（阿拉伯语 rtl）也要写回 <html dir>，CSS 没有跟着语言走的内置规则。
-    首帧那一下由 index.html 的内联脚本负责（否则英文用户每次打开都会先闪一帧中文标题）。
+    <html lang> 与排版方向。排版方向（阿拉伯语 rtl）也要写回 <html dir>，CSS 没有跟着语言走的内置规则。
+    首帧那一下由 index.html 的内联脚本负责。标题不在这里：它就是产品名，写死在 <title> 里。
   */
   useEffect(() => {
     document.documentElement.lang = LANG_TAGS[lang]
     document.documentElement.dir = dirOf(lang)
-    document.title = t('html.title')
-  }, [t, lang])
+  }, [lang])
 
   const value = useMemo(() => ({ mode, setMode, lang, t }), [mode, lang, t])
 

@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Scrawl · JS / TS 代码草稿纸</title>
+    <title>Scrawl</title>
+    <meta name="description" content="Scrawl is a scratchpad for running JavaScript and TypeScript in the browser: write a snippet, hit run, read the console." />
     <script>
       /*
         改名迁移：项目原来叫 Jotter，localStorage 里的键都是 jotter:* 开头。
@@ -65,18 +66,17 @@
       })()
 
       /*
-        同理，首帧之前定下语言：<html lang> 与标题在 React 挂载前就已经被读走（浏览器
-        标签页、辅助技术、拼写检查都看它们），英文用户不该先看到一帧中文标题。
+        同理，首帧之前定下语言：<html lang> 在 React 挂载前就已经被读走（辅助技术、
+        拼写检查都看它），不该先按错的语言画一帧。
 
-        语言表与各语言标题由 vite.config.ts 里的插件从 src/i18n/langs.ts 与各字典注入
-        （下面两个 __SCRAWL_*__ 占位符），这里不再手抄一份。
+        语言表由 vite.config.ts 里的插件从 src/i18n/langs.ts 注入（下面那个 __SCRAWL_*__ 占位符），
+        这里不再手抄一份。
         「按系统语言归位」的规则与 langs.ts 的 langFromTag 一致：中文按地区分简繁，其余按主语言码。
         <html dir> 也在这里先定（阿拉伯语 rtl），否则 RTL 会闪一帧错方向。
-        标题由运行期 dict 里的 html.title 兜底精确覆盖，这里只求首帧方向/语言不错。
+        标题就是产品名，写死在 <title> 里，不随语言变。
       */
       ;(function () {
         var LANG_TAGS = __SCRAWL_LANG_TAGS__
-        var TITLES = __SCRAWL_TITLES__
         var mode = 'system'
         try {
           var saved = localStorage.getItem('scrawl:lang')
@@ -98,7 +98,6 @@
         var attr = LANG_TAGS[lang] || 'en'
         document.documentElement.lang = attr
         document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
-        document.title = TITLES[attr] || 'Scrawl · JS / TS'
       })()
     </script>
   </head>
