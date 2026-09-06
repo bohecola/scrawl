@@ -4,15 +4,38 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Jotter · JS / TS 代码草稿纸</title>
+    <title>Scrawl</title>
+    <meta name="description" content="Scrawl is a scratchpad for running JavaScript and TypeScript in the browser: write a snippet, hit run, read the console." />
     <script>
+      /*
+        改名迁移：项目原来叫 Jotter，localStorage 里的键都是 jotter:* 开头。
+        在任何读取之前把它们改成 scrawl:*，老用户的语言、侧栏宽度、上次打开的文件都保得住。
+        放在首帧脚本最前面是因为下面马上就要读 scrawl:lang；IndexedDB 那边的库名迁移在 src/lib/idb.ts。
+      */
+      (function () {
+        try {
+          var keys = []
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i)
+            if (k && k.indexOf('jotter:') === 0) keys.push(k)
+          }
+          for (var j = 0; j < keys.length; j++) {
+            var nk = 'scrawl:' + keys[j].slice('jotter:'.length)
+            if (localStorage.getItem(nk) === null) localStorage.setItem(nk, localStorage.getItem(keys[j]))
+            localStorage.removeItem(keys[j])
+          }
+        } catch (e) {
+          /* 隐私模式下 localStorage 可能抛错，没什么可迁移的 */
+        }
+      })()
+
       /*
         首帧之前定下主题：React 挂载前 <html> 上没有 data-theme，
         会先按系统配色画一帧再跳变（默认是深色模式，浅色系统上就闪一下白）。
         这里同步读一次 localStorage 把 data-theme 补上。
         键名与默认值需与 src/theme/index.tsx 的 STORAGE_KEY / getInitialMode 保持一致。
       */
-      (function () {
+      ;(function () {
         var theme = 'dark'
         try {
           var saved = localStorage.getItem('playground-theme')
@@ -43,21 +66,20 @@
       })()
 
       /*
-        同理，首帧之前定下语言：<html lang> 与标题在 React 挂载前就已经被读走（浏览器
-        标签页、辅助技术、拼写检查都看它们），英文用户不该先看到一帧中文标题。
+        同理，首帧之前定下语言：<html lang> 在 React 挂载前就已经被读走（辅助技术、
+        拼写检查都看它），不该先按错的语言画一帧。
 
-        语言表与各语言标题由 vite.config.ts 里的插件从 src/i18n/langs.ts 与各字典注入
-        （下面两个 __JOTTER_*__ 占位符），这里不再手抄一份。
+        语言表由 vite.config.ts 里的插件从 src/i18n/langs.ts 注入（下面那个 __SCRAWL_*__ 占位符），
+        这里不再手抄一份。
         「按系统语言归位」的规则与 langs.ts 的 langFromTag 一致：中文按地区分简繁，其余按主语言码。
         <html dir> 也在这里先定（阿拉伯语 rtl），否则 RTL 会闪一帧错方向。
-        标题由运行期 dict 里的 html.title 兜底精确覆盖，这里只求首帧方向/语言不错。
+        标题就是产品名，写死在 <title> 里，不随语言变。
       */
       ;(function () {
         var LANG_TAGS = {"zh":"zh-CN","zhHant":"zh-Hant","en":"en","fr":"fr","de":"de","it":"it","ko":"ko","ja":"ja","vi":"vi","pt":"pt","ar":"ar"}
-        var TITLES = {"zh-CN":"Jotter · JS / TS 代码草稿纸","zh-Hant":"Jotter · JS / TS 程式草稿紙","en":"Jotter · JS / TS scratchpad","fr":"Jotter · Bloc-notes JS / TS","de":"Jotter · JS/TS-Notizzettel","it":"Jotter · Blocco note JS / TS","ko":"Jotter · JS / TS 메모장","ja":"Jotter · JS / TS スクラッチパッド","vi":"Jotter · Nháp JS / TS","pt":"Jotter · Rascunho JS / TS","ar":"Jotter · مسوّدة JS / TS"}
         var mode = 'system'
         try {
-          var saved = localStorage.getItem('jotter:lang')
+          var saved = localStorage.getItem('scrawl:lang')
           if (saved === 'system' || (saved && Object.prototype.hasOwnProperty.call(LANG_TAGS, saved))) mode = saved
         } catch (e) {
           /* 隐私模式下 localStorage 可能抛错，退回跟随系统 */
@@ -76,10 +98,9 @@
         var attr = LANG_TAGS[lang] || 'en'
         document.documentElement.lang = attr
         document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
-        document.title = TITLES[attr] || 'Jotter · JS / TS'
       })()
     </script>
-    <script type="module" crossorigin src="./assets/index-ChlS8SxP.js"></script>
+    <script type="module" crossorigin src="./assets/index-BOzxHewh.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-Dazu2lv5.css">
   </head>
   <body>
