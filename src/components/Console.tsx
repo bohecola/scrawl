@@ -1,7 +1,21 @@
-import { memo, useEffect, useRef, useState, useImperativeHandle, forwardRef, type CSSProperties } from 'react'
+import {
+  createContext,
+  forwardRef,
+  memo,
+  useCallback,
+  useDeferredValue,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useI18n } from '@/i18n/context'
 import { LANG_TAGS } from '@/i18n/langs'
 import { codeRunner, type RawConsoleMessage } from '@/lib/runner'
+import { measure, setMeasureFont } from '@/lib/text-width'
 import type { ConsoleMessage, LogLevel } from '../types'
 import Inspector from './Inspector'
 
@@ -32,9 +46,23 @@ function isLogLevel(v: unknown): v is LogLevel {
   return typeof v === 'string' && v in LEVEL_META
 }
 
+// 与 Tailwind 类对应的像素常量：可用宽度是拿 measure 量的，类名读不出数值，改类时同步。
+// px-2（容器左右内边距合计）、gap-2（行内各列之间）、px-1（徽标两侧合计）、mr-1（group ▾ 右边距）
+const PAD_X = 16
+const ROW_GAP = 8
+const BADGE_PAD = 8
+const ARROW_GAP = 4
+// group 缩进每层的 paddingInlineStart，与 Inspector 的折叠槽（GUTTER w-4）同套排版
+const INDENT_PX = 12
+
+// 日志正文列的可用宽度（px）。Infinity = 还没量出来，预览先靠 CSS truncate 兜底。
+// LogRow 是 memo 的，靠 context 感知宽度：宽度没变不重渲染，拖动分栏时才整列重算
+const ConsoleWidthContext = createContext<number>(Infinity)
+
 // 顶层的字符串参数按原文输出（和 DevTools 一致：console.log('hi') 不带引号），
 // 嵌在对象 / 数组里的字符串才由 Inspector 加引号。其余值都交给 Inspector 识别标记并渲染。
-function renderArg(arg: unknown, key: string | number) {
+// 多参数时每个参数各拿整行宽度：放不下会折到下一行，在自己那段里裁，不必精确分摊
+function renderArg(arg: unknown, key: string | number, width: number) {
   if (typeof arg === 'string') {
     return (
       <span key={key} className="whitespace-pre-wrap">
@@ -42,14 +70,14 @@ function renderArg(arg: unknown, key: string | number) {
       </span>
     )
   }
-  return <Inspector key={key} value={arg} />
+  return <Inspector key={key} value={arg} width={width} />
 }
 
-function renderArgs(args: unknown[], key: string) {
-  if (args.length === 1) return renderArg(args[0], key)
+function renderArgs(args: unknown[], key: string, width: number) {
+  if (args.length === 1) return renderArg(args[0], key, width)
   return (
     <span key={key} className="flex flex-wrap items-baseline gap-x-2">
-      {args.map((a, i) => renderArg(a, i))}
+      {args.map((a, i) => renderArg(a, i, width))}
     </span>
   )
 }
@@ -82,6 +110,14 @@ const ROW_STYLE: CSSProperties = { contentVisibility: 'auto', containIntrinsicSi
 // 单行 memo：一批新日志进来只渲染新增的那几百行，已有的几千行原样复用
 const LogRow = memo(function LogRow({ log, locale }: { log: ConsoleMessage; locale: string }) {
   const meta = LEVEL_META[log.type]
+  const contentWidth = useContext(ConsoleWidthContext)
+  // 本行预览的可用宽度：正文列宽减去徽标（按 10px 字号量宽，加两侧 px-1 与前面的 gap）、
+  // group 缩进与 ▾。字符串参数不裁剪（照原文折行），对象预览按这个宽裁
+  const rowWidth =
+    contentWidth -
+    (meta.badge ? measure(meta.badge.toUpperCase(), 10) + BADGE_PAD + ROW_GAP : 0) -
+    log.indent * INDENT_PX -
+    (log.type === 'group' ? measure('▾') + ARROW_GAP : 0)
   return (
     <div
       className={`flex gap-2 py-0.5 ${meta.color} border-b border-[var(--border)]/60 last:border-0`}
@@ -94,10 +130,10 @@ const LogRow = memo(function LogRow({ log, locale }: { log: ConsoleMessage; loca
       )}
       <div
         className="min-w-0 flex-1 break-words"
-        style={log.indent > 0 ? { paddingInlineStart: `${log.indent * 12}px` } : undefined}
+        style={log.indent > 0 ? { paddingInlineStart: `${log.indent * INDENT_PX}px` } : undefined}
       >
         {log.type === 'group' && <span className="mr-1 text-[var(--text-faint)]">▾</span>}
-        {renderArgs(log.args, String(log.id))}
+        {renderArgs(log.args, String(log.id), rowWidth)}
       </div>
     </div>
   )
@@ -109,6 +145,13 @@ export default forwardRef<ConsoleHandle>(function Console(_props, ref) {
   const [{ logs, omitted }, setState] = useState<LogState>(EMPTY)
   const idRef = useRef(0)
   const containerRef = useRef<HTMLDivElement>(null)
+  // 正文列可用宽度（px），初始 Infinity = 未量过；宽度帧合并用的 rAF 句柄
+  const [contentWidth, setContentWidth] = useState<number>(Infinity)
+  const widthFrameRef = useRef<number | null>(null)
+  // 拖动分栏时宽度每帧都在变，几千行 memo 的 LogRow 会跟着全量重渲染，太重。
+  // 传给 context 的宽度降一级优先级：拖动本身的 urgent 渲染先行，行的重算可被输入打断 ——
+  // 拖动中预览允许短暂滞后于面板宽度，松手后收敛到最终值，输入不卡
+  const fittedWidth = useDeferredValue(contentWidth)
   // worker 来的消息先进队列，一帧只 setState 一次；否则每条消息一次渲染，输出一多主线程就卡死
   const queueRef = useRef<ConsoleMessage[]>([])
   const droppedRef = useRef(0)
@@ -166,6 +209,44 @@ export default forwardRef<ConsoleHandle>(function Console(_props, ref) {
     if (el) el.scrollTop = el.scrollHeight
   }, [logs])
 
+  // 量一遍字体与正文列宽度。字体串从容器的 computed style 取（canvas 量宽必须用同一个字体），
+  // clientWidth 已含 px-2 的内边距，依次减掉内边距、时间列（随 locale 变）与 gap，
+  // 剩下的才是日志正文列。floor 是保守取整，别让预览按四舍五入多占出 1px 触发兜底截断
+  const updateWidth = useCallback(() => {
+    const el = containerRef.current
+    if (!el) return
+    const cs = getComputedStyle(el)
+    setMeasureFont(cs.font || `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`)
+    const w = Math.floor(el.clientWidth) - PAD_X - measure(formatTime(Date.now(), locale)) - ROW_GAP
+    setContentWidth((prev) => (prev === w ? prev : w))
+  }, [locale])
+
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    updateWidth()
+    const ro = new ResizeObserver(() => {
+      // rAF 合并：拖动分栏时一帧可能触发多次，一帧量一次重渲染一次就够
+      if (widthFrameRef.current !== null) return
+      widthFrameRef.current = requestAnimationFrame(() => {
+        widthFrameRef.current = null
+        updateWidth()
+      })
+    })
+    ro.observe(el)
+    // webfont 加载完成会改字宽，重新量一次（系统字体栈下这是空操作）
+    let cancelled = false
+    document.fonts.ready.then(() => {
+      if (!cancelled) updateWidth()
+    })
+    return () => {
+      cancelled = true
+      ro.disconnect()
+      if (widthFrameRef.current !== null) cancelAnimationFrame(widthFrameRef.current)
+      widthFrameRef.current = null
+    }
+  }, [updateWidth])
+
   useImperativeHandle(ref, () => ({
     clear: () => {
       queueRef.current = []
@@ -175,21 +256,26 @@ export default forwardRef<ConsoleHandle>(function Console(_props, ref) {
   }))
 
   return (
-    <div ref={containerRef} className="h-full overflow-auto bg-[var(--panel-bg)] px-2 py-1 font-mono text-[12px] leading-5">
-      {logs.length === 0 ? (
-        <div className="mt-1 text-[var(--text-faint)]">{t('console.empty')}</div>
-      ) : (
-        <>
-          {omitted > 0 && (
-            <div className="border-b border-[var(--border)]/60 py-0.5 text-[var(--text-faint)]">
-              … {t('console.omitted', { count: omitted })}
-            </div>
-          )}
-          {logs.map((log) => (
-            <LogRow key={log.id} log={log} locale={locale} />
-          ))}
-        </>
-      )}
-    </div>
+    <ConsoleWidthContext.Provider value={fittedWidth}>
+      <div
+        ref={containerRef}
+        className="h-full overflow-auto bg-[var(--panel-bg)] px-2 py-1 font-mono text-[12px] leading-5"
+      >
+        {logs.length === 0 ? (
+          <div className="mt-1 text-[var(--text-faint)]">{t('console.empty')}</div>
+        ) : (
+          <>
+            {omitted > 0 && (
+              <div className="border-b border-[var(--border)]/60 py-0.5 text-[var(--text-faint)]">
+                … {t('console.omitted', { count: omitted })}
+              </div>
+            )}
+            {logs.map((log) => (
+              <LogRow key={log.id} log={log} locale={locale} />
+            ))}
+          </>
+        )}
+      </div>
+    </ConsoleWidthContext.Provider>
   )
 })
