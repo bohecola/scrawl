@@ -150,6 +150,18 @@ function previewStyle(value: unknown): { text: string; cls: string } {
   return valueStyle(value, true)
 }
 
+/**
+ * 展开后的表头（同 Chrome DevTools）：预览收起，只留类型名。
+ * 明细已经在下面逐行列出来了，表头再重复一遍只是噪音；留个类型名是为了收起时还能对得上。
+ * 数组 `Array(3)`，实例 / Map / Set 用各自的名字，普通对象在根上写 `Object`、
+ * 作为属性时什么都不写（Chrome 也是这么省的：`element:` 后面留空）。
+ */
+function expandedTitle(value: unknown, depth: number): { text: string; cls: string } | null {
+  if (Array.isArray(value)) return { text: `Array(${value.length})`, cls: C.ctor }
+  if (isPlainObject(value) && !isMarked(value)) return depth === 0 ? { text: 'Object', cls: C.ctor } : null
+  return previewStyle(value)
+}
+
 // 预览里最多列几项：对象 5 个 key（同 DevTools），数组多给一些，短数组能一眼看全
 const PREVIEW_MAX = 5
 const ARRAY_PREVIEW_MAX = 10
@@ -435,7 +447,12 @@ function Inspector({ value, name, depth = 0, width = Infinity }: InspectorProps)
             CSS truncate 只作兜底；展开后的叶子值才允许换行 */}
         <span className="min-w-0 truncate">
           {label}
-          {node.spec && fit ? (
+          {open && node.spec ? (
+            (() => {
+              const title = expandedTitle(value, depth)
+              return title && <span className={title.cls}>{title.text}</span>
+            })()
+          ) : node.spec && fit ? (
             <span className={cn(C.dim, 'whitespace-pre')}>
               {node.spec.head && <span className={node.spec.head.cls}>{node.spec.head.text}</span>}
               {node.spec.open}
