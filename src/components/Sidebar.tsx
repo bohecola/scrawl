@@ -999,8 +999,9 @@ export default function Sidebar({
         >
         {/* ---- 本地目录 ---- */}
         {/* 分组标题吸顶（sticky），滚动时标题留在顶部、只有下面内容滚走（同 VS Code
-            的分组区）。铺面板底色盖住滑过下方的条目，悬停浮现的竖向滚动条在它右侧 */}
-        <div className="sticky top-0 z-10 flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--panel-bg)] px-2 pb-1 pt-1">
+            的分组区）。铺面板底色盖住滑过下方的条目，悬停浮现的竖向滚动条在它右侧。
+            h-9：和右边的标签栏、Console 头部同高，底下那根发丝线才能跨过分栏连成一条 */}
+        <div className="sticky top-0 z-10 flex h-9 items-center gap-0.5 border-b border-[var(--border)] bg-[var(--panel-bg)] px-2">
           <span className="me-auto text-[11px] tracking-wide text-[var(--text-faint)]">
             {t('sidebar.localDirs')}
           </span>
