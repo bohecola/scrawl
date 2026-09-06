@@ -1,11 +1,12 @@
-// 主题状态：明暗（亮 / 暗 / 跟随系统）+ 配色（蓝 / 粉 / 橙 / 绿，作用于界面高亮主色）。
+// 主题状态：明暗（亮 / 暗 / 跟随系统）+ 配色（蓝 / 粉 / 橙 / 绿 / 紫 / 青 / 石墨，作用于界面高亮主色）。
 // 通过 Context 提供，供 App 的界面共同消费。
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type EffectiveTheme = 'light' | 'dark'
-/** 界面高亮主色。蓝是历史默认值；粉 / 橙 / 绿按「粉白粉黑…」的需求补进来的四种之一。 */
-export type Accent = 'blue' | 'pink' | 'orange' | 'green'
+/** 界面高亮主色。蓝是历史默认值；粉 / 橙 / 绿按「粉白粉黑…」的需求补进来；
+    紫 / 青填色相环的空，石墨给不想要彩色的人（对照 macOS 的强调色集合）。 */
+export type Accent = 'blue' | 'pink' | 'orange' | 'green' | 'violet' | 'teal' | 'graphite'
 
 interface ThemeContextValue {
   mode: ThemeMode
@@ -33,7 +34,7 @@ function getInitialMode(): ThemeMode {
   return 'dark' // 默认延续暗色
 }
 
-const ACCENTS: readonly Accent[] = ['blue', 'pink', 'orange', 'green']
+const ACCENTS: readonly Accent[] = ['blue', 'pink', 'orange', 'green', 'violet', 'teal', 'graphite']
 
 function getInitialAccent(): Accent {
   try {

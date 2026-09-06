@@ -28,12 +28,12 @@
         }
         document.documentElement.setAttribute('data-theme', theme)
 
-        /* 配色（蓝 / 粉 / 橙 / 绿）与 theme 同帧补上，避免配色切换后刷新先闪一帧蓝。
+        /* 配色（蓝 / 粉 / 橙 / 绿 / 紫 / 青 / 石墨）与 theme 同帧补上，避免配色切换后刷新先闪一帧蓝。
            键名与 src/theme/index.tsx 的 ACCENT_KEY / getInitialAccent 保持一致。 */
         var accent = 'blue'
         try {
           var savedAccent = localStorage.getItem('playground-accent')
-          if (savedAccent === 'pink' || savedAccent === 'orange' || savedAccent === 'green') {
+          if (['pink', 'orange', 'green', 'violet', 'teal', 'graphite'].indexOf(savedAccent) !== -1) {
             accent = savedAccent
           }
         } catch (e) {

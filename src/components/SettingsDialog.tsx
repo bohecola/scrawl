@@ -58,6 +58,9 @@ const ACCENT_COLOR: Record<Accent, string> = {
   pink: '#ec4899',
   orange: '#f97316',
   green: '#22c55e',
+  violet: '#8b5cf6',
+  teal: '#14b8a6',
+  graphite: '#71717a',
 }
 
 const ACCENT_LABEL = {
@@ -65,6 +68,9 @@ const ACCENT_LABEL = {
   pink: 'header.accent.pink',
   orange: 'header.accent.orange',
   green: 'header.accent.green',
+  violet: 'header.accent.violet',
+  teal: 'header.accent.teal',
+  graphite: 'header.accent.graphite',
 } as const
 
 // ---- 快捷键表 ----

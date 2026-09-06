@@ -221,7 +221,10 @@ html {
 }
 
 /*
-  配色（高亮主色）：蓝 / 粉 / 橙 / 绿，通过 <html data-accent> 切换。
+  配色（高亮主色）：蓝 / 粉 / 橙 / 绿 / 紫 / 青 / 石墨，通过 <html data-accent> 切换。
+  取值一律是 Tailwind 调色板：暗色取 400 档（bright 取 300），浅色取 600 档（bright 取 700），
+  石墨用 zinc。加一种配色 = 这里两个块 + theme/index.tsx 的 ACCENTS + index.html 首帧脚本的
+  白名单 + 设置面板的圆点色 + header.accent.<名字> 的 11 种翻译。
   <html data-accent> 由 src/theme/index.tsx 写入，首帧脚本（index.html）会先补一次。
 
   只换「界面高亮主色」那几支 —— --accent-number / -bright 喂给 --primary、--ring，
@@ -265,6 +268,30 @@ html {
   --logo-hi: #4ade80;               /* green-400 */
   --logo-lo: #16a34a;               /* green-600 */
 }
+[data-theme='dark'][data-accent='violet'] {
+  --accent-number: #a78bfa;         /* violet-400 */
+  --accent-number-bright: #c4b5fd;  /* violet-300 */
+  --list-active: rgba(167, 139, 250, 0.16);
+  --list-active-ring: rgba(167, 139, 250, 0.8);
+  --logo-hi: #a78bfa;               /* violet-400 */
+  --logo-lo: #7c3aed;               /* violet-600 */
+}
+[data-theme='dark'][data-accent='teal'] {
+  --accent-number: #2dd4bf;         /* teal-400 */
+  --accent-number-bright: #5eead4;  /* teal-300 */
+  --list-active: rgba(45, 212, 191, 0.16);
+  --list-active-ring: rgba(45, 212, 191, 0.8);
+  --logo-hi: #2dd4bf;               /* teal-400 */
+  --logo-lo: #0d9488;               /* teal-600 */
+}
+[data-theme='dark'][data-accent='graphite'] {
+  --accent-number: #a1a1aa;         /* zinc-400 */
+  --accent-number-bright: #d4d4d8;  /* zinc-300 */
+  --list-active: rgba(161, 161, 170, 0.16);
+  --list-active-ring: rgba(161, 161, 170, 0.8);
+  --logo-hi: #a1a1aa;               /* zinc-400 */
+  --logo-lo: #52525b;               /* zinc-600 */
+}
 [data-theme='light'][data-accent='blue'] {
   --accent-number: #0284c7;         /* sky-600 */
   --accent-number-bright: #0369a1;  /* sky-700 */
@@ -296,6 +323,30 @@ html {
   --list-active-ring: rgba(22, 163, 74, 0.85);
   --logo-hi: #4ade80;               /* green-400 */
   --logo-lo: #16a34a;               /* green-600 */
+}
+[data-theme='light'][data-accent='violet'] {
+  --accent-number: #7c3aed;         /* violet-600 */
+  --accent-number-bright: #6d28d9;  /* violet-700 */
+  --list-active: rgba(124, 58, 237, 0.12);
+  --list-active-ring: rgba(124, 58, 237, 0.85);
+  --logo-hi: #a78bfa;               /* violet-400 */
+  --logo-lo: #7c3aed;               /* violet-600 */
+}
+[data-theme='light'][data-accent='teal'] {
+  --accent-number: #0d9488;         /* teal-600 */
+  --accent-number-bright: #0f766e;  /* teal-700 */
+  --list-active: rgba(13, 148, 136, 0.12);
+  --list-active-ring: rgba(13, 148, 136, 0.85);
+  --logo-hi: #2dd4bf;               /* teal-400 */
+  --logo-lo: #0d9488;               /* teal-600 */
+}
+[data-theme='light'][data-accent='graphite'] {
+  --accent-number: #52525b;         /* zinc-600 */
+  --accent-number-bright: #3f3f46;  /* zinc-700 */
+  --list-active: rgba(82, 82, 91, 0.12);
+  --list-active-ring: rgba(82, 82, 91, 0.85);
+  --logo-hi: #a1a1aa;               /* zinc-400 */
+  --logo-lo: #52525b;               /* zinc-600 */
 }
 
 /* 全局页面级 reset：根容器填满视口、去掉 body 默认 margin 与白色背景 */
