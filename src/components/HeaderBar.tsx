@@ -36,7 +36,7 @@ export function HeaderBar({ showImport, onImport }: HeaderBarProps) {
         </>
       )}
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ms-auto flex items-center gap-2">
         {/* 语言 / 配色 / 明暗 / 编辑器选项全部收进一个「设置」面板，见 SettingsDialog */}
         <SettingsDialog />
 

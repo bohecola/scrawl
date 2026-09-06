@@ -413,7 +413,7 @@ function Inspector({ value, name, depth = 0, width = Infinity }: InspectorProps)
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="group/row flex w-full cursor-pointer select-none text-left focus:outline-none"
+        className="group/row flex w-full cursor-pointer select-none text-start focus:outline-none"
       >
         <span
           className={cn(
@@ -423,8 +423,11 @@ function Inspector({ value, name, depth = 0, width = Infinity }: InspectorProps)
         >
           <span
             className={cn(
+              // 展开后朝下在两种方向下都对；收起时 RTL 界面里应指左（chevron 左右对称，
+              // 转 180° 等于镜像）。不用 rtl: 变体：它是 [dir=rtl] * 匹配，会无视中间
+              // 日志行的 dir=ltr 把行内的三角也转掉；:dir() 只认最近的 dir 祖先
               'icon-[lucide--chevron-right] size-3 transition-transform duration-100',
-              open && 'rotate-90'
+              open ? 'rotate-90' : '[&:dir(rtl)]:rotate-180'
             )}
           />
         </span>

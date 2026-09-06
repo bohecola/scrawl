@@ -201,11 +201,11 @@ function Row({
       title={label}
       // style 要和外面传进来的合并：ContextMenuTrigger asChild 会往下塞一个
       // style（WebkitTouchCallout），直接 {...rest} 会把这里的缩进整个顶掉
-      style={{ paddingLeft: padOf(depth), ...style }}
+      style={{ paddingInlineStart: padOf(depth), ...style }}
       className={cn(
         // 不加圆角：VS Code 的选中 / hover 是贴边的整行矩形
         // 预留 1px 透明边框：选中时改成主色细框，四周都画得出来、且不造成布局跳动
-        'relative flex w-full items-center gap-1.5 border border-transparent py-1 pr-2 text-left text-[13px] text-[var(--text-body)]',
+        'relative flex w-full items-center gap-1.5 border border-transparent py-1 pe-2 text-start text-[13px] text-[var(--text-body)]',
         // hover 只加在非选中行上，避免悬停时把选中底色盖成普通 hover
         !isSelected && 'hover:bg-[var(--panel-hover)]',
         // 选中行：整行平铺半透明底色 + 四周 1px 细框（同 VS Code 的焦点描边）
@@ -222,7 +222,7 @@ function Row({
       {dirty && (
         <span
           aria-label={t('sidebar.unsaved')}
-          className="ml-auto size-1.5 shrink-0 rounded-full bg-[var(--accent-symbol)]"
+          className="ms-auto size-1.5 shrink-0 rounded-full bg-[var(--accent-symbol)]"
         />
       )}
     </button>
@@ -311,11 +311,11 @@ function DraftRow({ depth, draft, value }: { depth: number; draft: FileDraft; va
   return (
     <li>
       <div
-        style={{ paddingLeft: padOf(depth) }}
-        className="flex w-full items-center gap-1.5 py-1 pr-2"
+        style={{ paddingInlineStart: padOf(depth) }}
+        className="flex w-full items-center gap-1.5 py-1 pe-2"
       >
         <span className={TWISTIE_SLOT}>
-          {value.kind === 'directory' && <Icon className="icon-[lucide--chevron-right]" />}
+          {value.kind === 'directory' && <Icon className="icon-[lucide--chevron-right] rtl:rotate-180" />}
         </span>
         {/* 图标跟着输入的名字变（同 VS Code）：敲完后缀就能看到它会是什么文件 */}
         <span className={ICON_SLOT}>
@@ -348,8 +348,8 @@ function DraftRow({ depth, draft, value }: { depth: number; draft: FileDraft; va
       </div>
       {value.error && (
         <p
-          style={{ paddingLeft: padOf(depth + 1) }}
-          className="pb-1 pr-2 text-[12px] leading-snug text-[var(--accent-error)]"
+          style={{ paddingInlineStart: padOf(depth + 1) }}
+          className="pb-1 pe-2 text-[12px] leading-snug text-[var(--accent-error)]"
         >
           {translate(value.error, t)}
         </p>
@@ -417,7 +417,7 @@ function RootRow({
     <div
       className={cn(
         // 预留 1px 透明边框：选中时改成主色细框，四周都画得出来、不造成布局跳动
-        'group relative flex items-center border border-transparent pr-1',
+        'group relative flex items-center border border-transparent pe-1',
         selected
           ? 'bg-[var(--list-active)] border-[var(--list-active-ring)]'
           : 'hover:bg-[var(--panel-hover)]'
@@ -450,8 +450,8 @@ function RootRow({
           e.preventDefault()
           setMenuOpen(true)
         }}
-        style={{ paddingLeft: padOf(0) }}
-        className="relative flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1 text-left text-[13px]"
+        style={{ paddingInlineStart: padOf(0) }}
+        className="relative flex min-w-0 flex-1 items-center gap-1.5 py-1 pe-1 text-start text-[13px]"
       >
         <span className={TWISTIE_SLOT}>
           {locked ? (
@@ -459,7 +459,7 @@ function RootRow({
           ) : open ? (
             <Icon className="icon-[lucide--chevron-down]" />
           ) : (
-            <Icon className="icon-[lucide--chevron-right]" />
+            <Icon className="icon-[lucide--chevron-right] rtl:rotate-180" />
           )}
         </span>
         <span className={ICON_SLOT}>
@@ -474,7 +474,7 @@ function RootRow({
           {root.name}
         </span>
         {locked && (
-          <span className="ml-auto shrink-0 text-[11px] text-[var(--text-faint)]">
+          <span className="ms-auto shrink-0 text-[11px] text-[var(--text-faint)]">
             {t('sidebar.needAuth')}
           </span>
         )}
@@ -620,7 +620,7 @@ function Tree({
                 open ? (
                   <Icon className="icon-[lucide--chevron-down]" />
                 ) : (
-                  <Icon className="icon-[lucide--chevron-right]" />
+                  <Icon className="icon-[lucide--chevron-right] rtl:rotate-180" />
                 )
               }
               icon={<FileIcon kind="directory" name={entry.name} expanded={open} />}
@@ -691,7 +691,7 @@ function Tree({
       {listing.entries.map(rowFor)}
       {listing.entries.length === 0 && !drafting && (
         <li
-          style={{ paddingLeft: padOf(depth + 1) }}
+          style={{ paddingInlineStart: padOf(depth + 1) }}
           className="py-1 text-[12px] text-[var(--text-faint)]"
         >
           {t('sidebar.emptyDir')}
@@ -699,7 +699,7 @@ function Tree({
       )}
       {listing.truncated && (
         <li
-          style={{ paddingLeft: padOf(depth + 1) }}
+          style={{ paddingInlineStart: padOf(depth + 1) }}
           className="py-1 text-[12px] text-[var(--text-faint)]"
         >
           {/* 上限从常量取，不写在句子里：否则中英两份字典各自记一个 500，改的时候准漏 */}
@@ -993,7 +993,7 @@ export default function Sidebar({
           className="text-[var(--text-muted)]"
           onClick={() => setCollapsed(false)}
         >
-          <Icon className="icon-[lucide--panel-left-open]" />
+          <Icon className="icon-[lucide--panel-left-open] rtl:-scale-x-100" />
         </Button>
       </div>
     )
@@ -1040,7 +1040,7 @@ export default function Sidebar({
             className="text-[var(--text-muted)]"
             onClick={() => setCollapsed(true)}
           >
-            <Icon className="icon-[lucide--panel-left-close]" />
+            <Icon className="icon-[lucide--panel-left-close] rtl:-scale-x-100" />
           </Button>
         </div>
       </div>
@@ -1058,7 +1058,7 @@ export default function Sidebar({
         {/* 分组标题吸顶（sticky），滚动时标题留在顶部、只有下面内容滚走（同 VS Code
             的分组区）。铺面板底色盖住滑过下方的条目，悬停浮现的竖向滚动条在它右侧 */}
         <div className="sticky top-0 z-10 flex items-center gap-0.5 border-b border-[var(--border)] bg-[var(--panel-bg)] px-2 pb-1 pt-1">
-          <span className="mr-auto text-[11px] tracking-wide text-[var(--text-faint)]">
+          <span className="me-auto text-[11px] tracking-wide text-[var(--text-faint)]">
             {t('sidebar.localDirs')}
           </span>
           {workspace.supported && (
@@ -1240,26 +1240,26 @@ export default function Sidebar({
         )}
 
         {/* ---- Demo 片段 ---- */}
-        <div className="mt-3 flex items-center gap-0.5 pb-1 pr-2">
+        <div className="mt-3 flex items-center gap-0.5 pb-1 pe-2">
           <button
             type="button"
             onClick={() => setTemplatesOpen((open) => !open)}
             aria-expanded={templatesOpen}
-            className="flex min-w-0 flex-1 items-center gap-1 px-2 text-left text-[11px] tracking-wide text-[var(--text-faint)] hover:text-[var(--text-body)]"
+            className="flex min-w-0 flex-1 items-center gap-1 px-2 text-start text-[11px] tracking-wide text-[var(--text-faint)] hover:text-[var(--text-body)]"
           >
             {/* 和 ICON_SLOT 同一个道理，只是这里的图标更小、颜色跟着标题走 */}
             <span className="flex shrink-0 items-center [&>[data-slot=icon]]:size-3">
               {templatesOpen ? (
                 <Icon className="icon-[lucide--chevron-down]" />
               ) : (
-                <Icon className="icon-[lucide--chevron-right]" />
+                <Icon className="icon-[lucide--chevron-right] rtl:rotate-180" />
               )}
             </span>
             {t('sidebar.demos')}
             {!templatesOpen && templatesDirty && (
               <span
                 aria-label={t('sidebar.demosDirty')}
-                className="ml-auto size-1.5 shrink-0 rounded-full bg-[var(--accent-symbol)]"
+                className="ms-auto size-1.5 shrink-0 rounded-full bg-[var(--accent-symbol)]"
               />
             )}
           </button>

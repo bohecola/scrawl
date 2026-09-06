@@ -401,22 +401,6 @@ html {
 }
 
 /*
-  从右到左（阿拉伯语，<html dir=rtl>）的修正层。
-
-  布局大多用 flex，切换方向后主轴镜像基本自动成立；但少数用物理 left/right 的
-  auto-margin / 分隔线不会跟着翻，这里做定点兜底。Tailwind 的这些工具类特异性
-  都是 (0,1,0)，而这里用双属性选择器 (0,2,0) 稳胜。
-*/
-[dir='rtl'] .ml-auto {
-  margin-left: 0;
-  margin-right: auto;
-}
-[dir='rtl'] .mr-auto {
-  margin-right: 0;
-  margin-left: auto;
-}
-
-/*
   阿拉伯语下代码仍应保持从左到右：Monaco 编辑器若跟着整页反转成 RTL 会把代码镜像错乱。
   这里把它钉回 LTR —— 只有 [dir=rtl] 时才生效，LTR 界面完全不受影响。
   UI 外壳（侧栏/顶栏/对话框）仍走 dir=rtl 正常镜像。

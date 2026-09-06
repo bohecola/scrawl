@@ -834,7 +834,7 @@ function App() {
             />
           </div>
           <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--panel-bg)] max-md:min-h-[180px] max-md:border-t max-md:border-[var(--border)] md:min-w-[220px]">
-            <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--border)] pl-3 pr-1.5 text-[12.5px] tracking-wide text-[var(--text-muted)]">
+            <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--border)] ps-3 pe-1.5 text-[12.5px] tracking-wide text-[var(--text-muted)]">
               <span>Console</span>
               <Button
                 variant="ghost"

@@ -47,7 +47,7 @@ function isLogLevel(v: unknown): v is LogLevel {
 }
 
 // 与 Tailwind 类对应的像素常量：可用宽度是拿 measure 量的，类名读不出数值，改类时同步。
-// px-2（容器左右内边距合计）、gap-2（行内各列之间）、px-1（徽标两侧合计）、mr-1（group ▾ 右边距）
+// px-2（容器左右内边距合计）、gap-2（行内各列之间）、px-1（徽标两侧合计）、me-1（group ▾ 的行末边距）
 const PAD_X = 16
 const ROW_GAP = 8
 const BADGE_PAD = 8
@@ -120,6 +120,10 @@ const LogRow = memo(function LogRow({ log, locale }: { log: ConsoleMessage; loca
     (log.type === 'group' ? measure('▾') + ARROW_GAP : 0)
   return (
     <div
+      // 日志是代码（值 / JSON / 堆栈），像编辑器一样钉在 LTR；行内缩进用的
+      // paddingInlineStart 因此始终落在左边。行外的空态 / 省略提示是界面文字，
+      // 不在这里，仍跟着界面方向走
+      dir="ltr"
       className={`flex gap-2 py-0.5 ${meta.color} border-b border-[var(--border)]/60 last:border-0`}
       // 离屏的行跳过布局与绘制：几千行一起挂着时，每来一批新日志就重排全部行太贵
       style={ROW_STYLE}
@@ -132,7 +136,7 @@ const LogRow = memo(function LogRow({ log, locale }: { log: ConsoleMessage; loca
         className="min-w-0 flex-1 break-words"
         style={log.indent > 0 ? { paddingInlineStart: `${log.indent * INDENT_PX}px` } : undefined}
       >
-        {log.type === 'group' && <span className="mr-1 text-[var(--text-faint)]">▾</span>}
+        {log.type === 'group' && <span className="me-1 text-[var(--text-faint)]">▾</span>}
         {renderArgs(log.args, String(log.id), rowWidth)}
       </div>
     </div>

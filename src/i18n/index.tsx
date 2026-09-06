@@ -7,6 +7,7 @@
 */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
+import { Direction } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
 
 import { LANG_TAGS } from './langs'
@@ -78,5 +79,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ mode, setMode, lang, t }), [mode, lang, t])
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
+  /*
+    Radix 的弹层（Select / DropdownMenu / ContextMenu / Tooltip…）不读 <html dir>，
+    方向由各自的 DirectionProvider 决定，默认 LTR。在这里包一层，让所有弹层
+    跟着界面方向走：阿拉伯语下选项右对齐、勾在行首、子菜单往左弹、方向键正确。
+  */
+  return (
+    <I18nContext.Provider value={value}>
+      <Direction.Provider dir={dirOf(lang)}>{children}</Direction.Provider>
+    </I18nContext.Provider>
+  )
 }

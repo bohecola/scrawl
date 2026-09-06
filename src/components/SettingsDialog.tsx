@@ -119,7 +119,9 @@ function Kbd({ children }: { children: ReactNode }) {
 
 function Combo({ keys }: { keys: string[] }) {
   return (
-    <span className="inline-flex items-center gap-1">
+    // 快捷键组合是按键序列，顺序有含义（⌘ 在前）：RTL 下 flex 主轴反向会把它显示反，
+    // 钉回 LTR —— macOS 阿拉伯语系统设置里的快捷键也保持原顺序
+    <span dir="ltr" className="inline-flex items-center gap-1">
       {keys.map((k, i) => (
         <Kbd key={i}>{k}</Kbd>
       ))}
