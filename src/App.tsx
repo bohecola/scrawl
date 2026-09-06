@@ -278,7 +278,7 @@ function App() {
   const openUntitled = useCallback(() => {
     const row = untitled.create()
     const key = untitledKey(row.n)
-    editorRef.current?.open({ key, value: '', language: row.language })
+    editorRef.current?.open({ key, value: '', language: row.language, untitled: true })
     openOrActivate({
       key,
       kind: 'untitled',
@@ -294,8 +294,7 @@ function App() {
     const files: ActiveFile[] = []
     for (const row of untitled.all()) {
       const key = untitledKey(row.n)
-      // 有内容的恢复出来就是脏的：它还没落过盘，标签上的点得亮着
-      editorRef.current?.open({ key, value: row.content, language: row.language, dirty: row.content !== '' })
+      editorRef.current?.open({ key, value: row.content, language: row.language, untitled: true })
       files.push({ key, kind: 'untitled', name: t('file.untitled', { n: row.n }), language: row.language, encoding: 'UTF-8' })
     }
     setTabs((prev) => [...prev, ...files.filter((f) => !prev.some((x) => x.key === f.key))])

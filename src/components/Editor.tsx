@@ -20,11 +20,11 @@ export interface OpenFileSpec {
   value: string
   language: string
   /**
-   * 新建 model 时就算脏，直到 markSaved / replace 才干净。
-   * 给刷新后恢复的未命名文件用：内容从 IndexedDB 来，但它还没落过盘，
-   * 标签上的点得接着亮，不能因为「和恢复出来的基线一样」就当已保存。
+   * 未命名文件：脏不脏只看有没有内容（同 VS Code 的 Untitled）。
+   * 它没有磁盘上的基线可比 —— 有内容就是「还没存的东西」，清空了就没什么可丢的，点也跟着灭。
+   * 刷新后从 IndexedDB 恢复出来的也走这条规则，不会因为「和恢复出来的一样」就当已保存。
    */
-  dirty?: boolean
+  untitled?: boolean
 }
 
 /**
@@ -189,21 +189,24 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
       if (existing) return existing
 
       const model = monaco.editor.createModel(file.value, file.language, modelUri(file.key))
+      const isDirty = () =>
+        file.untitled
+          ? model.getValueLength() > 0
+          : model.getAlternativeVersionId() !== rec.savedVersionId
       const rec: ModelRecord = {
         model,
         viewState: null,
-        // dirty 的 model 基线给一个永远对不上的版本号：怎么改都是脏，直到 markSaved / replace 重置
-        savedVersionId: file.dirty ? -1 : model.getAlternativeVersionId(),
+        savedVersionId: model.getAlternativeVersionId(),
         dirty: false,
         listener: model.onDidChangeContent(() => {
           if (applying) return
-          notifyDirty(file.key, model.getAlternativeVersionId() !== rec.savedVersionId)
+          notifyDirty(file.key, isDirty())
           callbacksRef.current.onChange?.(file.key, model.getValue())
         }),
         lastUsed: 0,
       }
       modelsRef.current.set(file.key, rec)
-      if (file.dirty) notifyDirty(file.key, true)
+      if (isDirty()) notifyDirty(file.key, true)
       return rec
     }
 
