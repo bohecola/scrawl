@@ -73,6 +73,54 @@ const ACCENT_LABEL = {
   graphite: 'header.accent.graphite',
 } as const
 
+/**
+ * 配色选择器：平涂的圆角方块色板，像设计工具里的颜色选择器。
+ * 选中的用自己的颜色描一圈、中间留一道背景色的缝，而不是统一的灰圈，石墨那块才不会和「选中」混。
+ * 名字不常驻显示，悬停 / 聚焦时用面板里同款的 Tooltip 弹出（同「?」说明气泡）。
+ */
+function AccentPicker({
+  accent,
+  onChange,
+  t,
+}: {
+  accent: Accent
+  onChange: (a: Accent) => void
+  t: (key: (typeof ACCENT_LABEL)[Accent]) => string
+}) {
+  return (
+    <div role="radiogroup" className="flex items-center gap-2">
+      {ACCENTS.map((a) => {
+        const on = a === accent
+        const color = ACCENT_COLOR[a]
+        return (
+          <Tooltip key={a}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-label={t(ACCENT_LABEL[a])}
+                onClick={() => onChange(a)}
+                className={cn(
+                  'flex size-[22px] items-center justify-center rounded-md outline-none transition-[box-shadow,opacity] duration-150',
+                  on ? 'opacity-100' : 'opacity-80 hover:opacity-100 focus-visible:opacity-100'
+                )}
+                style={{
+                  backgroundColor: color,
+                  boxShadow: on ? `0 0 0 2px var(--background), 0 0 0 4px ${color}` : undefined,
+                }}
+              >
+                {on && <Icon className="icon-[lucide--check] size-3.5 text-white" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{t(ACCENT_LABEL[a])}</TooltipContent>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}
+
 // ---- 快捷键表 ----
 // 每个组合是一串按键；同一功能有多个组合时并列。Mac 用符号，其余平台用英文名。
 // 回车用 ↵（U+21B5）而不是 ↩（U+21A9）：后者在 Chrome 里会落到彩色 emoji 字体上
@@ -406,30 +454,7 @@ export function SettingsDialog() {
                       />
                     </Row>
                     <Row label={t('settings.accent')}>
-                      <div role="radiogroup" className="flex items-center gap-2.5">
-                        {ACCENTS.map((a) => {
-                          const on = a === accent
-                          return (
-                            <button
-                              key={a}
-                              type="button"
-                              role="radio"
-                              aria-checked={on}
-                              title={t(ACCENT_LABEL[a])}
-                              aria-label={t(ACCENT_LABEL[a])}
-                              onClick={() => setAccent(a)}
-                              className={cn(
-                                'flex size-5 items-center justify-center rounded-full transition-transform hover:scale-110',
-                                on &&
-                                  'ring-2 ring-[var(--text-body)] ring-offset-2 ring-offset-[var(--background)]'
-                              )}
-                              style={{ backgroundColor: ACCENT_COLOR[a] }}
-                            >
-                              {on && <Icon className="icon-[lucide--check] size-3 text-white" />}
-                            </button>
-                          )
-                        })}
-                      </div>
+                      <AccentPicker accent={accent} onChange={setAccent} t={t} />
                     </Row>
                     <Row label={t('settings.language')}>
                       {/* 各语言项刻意用各自母语写：看不懂当前界面语言的人，正需要用目标语言认出自己那一项 */}
