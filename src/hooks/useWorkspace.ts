@@ -39,14 +39,20 @@ import {
   还有「上次展开了哪些层」的持久化内容，撞了就会互相盖掉。
   id 跟 handle 一起存进 IndexedDB，所以重开页面后这些 key 还对得上。
 
-  每个根有两种状态，UI 完全不同：
-  - needsPermission === false  →  可用，展开就是目录树
-  - needsPermission === true   →  上次打开过，这次还没拿到权限，行上标「需要授权」
+  每个根有三种状态，UI 完全不同：
+  - status === 'ready'    →  可用，展开就是目录树
+  - status === 'locked'   →  上次打开过，这次还没拿到权限，行上标「需要授权」
+  - status === 'missing'  →  句柄指向的目录找不到了（改名、移动、删除、外置盘没插），行上标「找不到目录」
 
-  为什么会有后面这个状态：从 IndexedDB 取回 handle 之后权限不会自动续上，
+  为什么会有 locked：从 IndexedDB 取回 handle 之后权限不会自动续上，
   requestPermission 必须发生在用户手势里。所以「静默恢复」只在浏览器已经
   记住了这个站点的持久授权时才成立（Chrome 的「每次访问时允许」），
   否则只能等用户点一下那一行。
+
+  为什么 missing 不直接删：一次 NotFoundError 不足以证明目录真的没了 —— 外置盘、
+  网络盘、临时改名、甚至一次失败的授权尝试都可能撞上它。用户开过的目录是用户的
+  配置，程序不该替用户删（VS Code 对丢失的工作区目录也是标出来、留着）。
+  留在列表里，移回来后点一下就恢复；确实不要了由用户右键关闭。
 
   目录树是懒展开的：childrenByPath 里只有用户真的展开过的那几层。
   用一张 path → Listing 的平表而不是嵌套树结构，是因为「刷新某一层」「展开某一层」
@@ -71,11 +77,13 @@ export interface WorkspaceRoot {
   id: string
   name: string
   handle: FileSystemDirectoryHandle
-  /** 还没拿到权限：内容读不出来，等用户点一下那一行 */
-  needsPermission: boolean
+  /** ready 可用；locked 还没拿到权限，等用户点一下那一行；missing 目录找不到了，见文件头注释 */
+  status: RootStatus
 }
 
-/** 存进 IndexedDB 的那部分。needsPermission 是运行时状态，不存。 */
+export type RootStatus = 'ready' | 'locked' | 'missing'
+
+/** 存进 IndexedDB 的那部分。status 是运行时状态，不存。 */
 type StoredRoot = Pick<WorkspaceRoot, 'id' | 'name' | 'handle'>
 
 /** 路径的第一段就是它所属根目录的 id。 */
@@ -288,10 +296,19 @@ export function useWorkspace(): Workspace {
   const liveRootOf = useCallback(
     (path: string) => {
       const root = rootOf(path)
-      return root && !root.needsPermission ? root : null
+      return root && root.status === 'ready' ? root : null
     },
     [rootOf]
   )
+
+  /** 已在列表里就就地改状态（位置不动），不在就追加 */
+  const setRootStatus = useCallback((root: StoredRoot, status: RootStatus) => {
+    setRoots((prev) =>
+      prev.some((r) => r.id === root.id)
+        ? prev.map((r) => (r.id === root.id ? { ...r, status } : r))
+        : [...prev, { ...root, status }]
+    )
+  }, [])
 
   /**
    * 打开一个已经拿到权限的目录：列它自己这一层，再把上次展开过的子层尽量恢复回来。
@@ -323,25 +340,17 @@ export function useWorkspace(): Workspace {
       setChildrenByPath((prev) => new Map([...prev, ...map]))
       setExpanded((prev) => new Set([...prev, ...opened]))
       // 重新授权走的也是这里，那时它已经在列表里了，就地更新，位置不动
-      setRoots((prev) =>
-        prev.some((r) => r.id === root.id)
-          ? prev.map((r) => (r.id === root.id ? { ...root, needsPermission: false } : r))
-          : [...prev, { ...root, needsPermission: false }]
-      )
+      setRootStatus(root, 'ready')
       // 第一个可用目录顺手成为新建目标，省掉用户一次点击
       setTarget((prev) => prev || root.id)
     } catch (err) {
       if (isStaleHandleError(err)) {
-        // 目录没了就别在列表里挂着（roots 落盘的 effect 会跟着把它从 IndexedDB 里去掉）
-        setRoots((prev) => prev.filter((r) => r.id !== root.id))
+        // 目录找不到了：标出来、留在列表里（见文件头），不替用户删
+        setRootStatus(root, 'missing')
         setError(tRef.current('err.ws.rootMoved', { name: root.name }))
       } else if (isPermissionError(err)) {
-        // 权限被撤销：目录还在，留在列表里等用户再点一次授权，别当成「已移动」删掉
-        setRoots((prev) =>
-          prev.some((r) => r.id === root.id)
-            ? prev.map((r) => (r.id === root.id ? { ...r, needsPermission: true } : r))
-            : [...prev, { ...root, needsPermission: true }]
-        )
+        // 权限被撤销：目录还在，留在列表里等用户再点一次授权，别当成「已移动」
+        setRootStatus(root, 'locked')
         setError(tRef.current('err.ws.permissionDenied', { name: root.name }))
       } else {
         setError(messageOf(err, tRef.current))
@@ -349,7 +358,7 @@ export function useWorkspace(): Workspace {
     } finally {
       setBusy(false)
     }
-  }, [])
+  }, [setRootStatus])
 
   // 进页面时把上次的目录挨个问一遍：浏览器已经记住授权（「每次访问时允许」）就直接恢复，
   // 否则只在列表里占一行，等用户点一下 —— 重新授权必须发生在用户手势里。
@@ -366,9 +375,7 @@ export function useWorkspace(): Workspace {
             await activate(row, wanted.includes(row.id))
           } else {
             setRoots((prev) =>
-              prev.some((r) => r.id === row.id)
-                ? prev
-                : [...prev, { ...row, needsPermission: true }]
+              prev.some((r) => r.id === row.id) ? prev : [...prev, { ...row, status: 'locked' }]
             )
           }
         }
@@ -391,11 +398,11 @@ export function useWorkspace(): Workspace {
     void idbSet(IDB_KEY, rows).catch(() => {})
   }, [roots, ready, supported])
 
-  // 展开状态跟着变化落盘。没授权的根读不出树，它那部分展开状态还留在存储里，
+  // 展开状态跟着变化落盘。没授权 / 找不到的根读不出树，它那部分展开状态还留在存储里，
   // 这里要原样带过去，别顺手擦掉。
   useEffect(() => {
     if (!ready || !supported) return
-    const asleep = new Set(roots.filter((r) => r.needsPermission).map((r) => r.id))
+    const asleep = new Set(roots.filter((r) => r.status !== 'ready').map((r) => r.id))
     const kept = asleep.size ? readExpanded().filter((path) => asleep.has(rootIdOf(path))) : []
     writeExpanded([...new Set([...expanded, ...kept])])
   }, [expanded, roots, ready, supported])
@@ -484,7 +491,7 @@ export function useWorkspace(): Workspace {
       setChildrenByPath((prev) => new Map([...prev].filter(([path]) => !mine(path))))
       setExpanded((prev) => new Set([...prev].filter((path) => !mine(path))))
       // 目标在这棵树里的话，挪到还留着的第一个可用目录上
-      setTarget((prev) => (mine(prev) ? (left.find((r) => !r.needsPermission)?.id ?? '') : prev))
+      setTarget((prev) => (mine(prev) ? (left.find((r) => r.status === 'ready')?.id ?? '') : prev))
       setError(null)
     },
     [roots]
@@ -863,7 +870,7 @@ export function useWorkspace(): Workspace {
   // 再看里面有没有 .crswap（createWritable 写入中断留下的交换文件，完整保存不会有）。
   const detectResidualDemos = useCallback(
     async (root: WorkspaceRoot): Promise<ResidualDemo[]> => {
-      if (root.needsPermission) return []
+      if (root.status !== 'ready') return []
       try {
         const top = await listDirectory(root.handle, root.id)
         const demoDirs = top.entries.filter(
@@ -889,7 +896,7 @@ export function useWorkspace(): Workspace {
     supported,
     ready,
     roots,
-    hasRoot: roots.some((root) => !root.needsPermission),
+    hasRoot: roots.some((root) => root.status === 'ready'),
     childrenByPath,
     expanded,
     target,

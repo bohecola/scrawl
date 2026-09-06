@@ -387,7 +387,9 @@ function RootRow({
 }) {
   const { t } = useI18n()
   const open = workspace.expanded.has(root.id)
-  const locked = root.needsPermission
+  // locked / missing 都读不出内容：点一下去恢复，菜单只留「移除」
+  const locked = root.status !== 'ready'
+  const missing = root.status === 'missing'
   // 菜单是受控的：⋯ 按钮和整行的右键要打开同一个菜单
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -429,9 +431,11 @@ function RootRow({
         aria-selected={selected}
         type="button"
         title={
-          locked
-            ? t('sidebar.rootLocked', { name: root.name })
-            : t('sidebar.rootHint', { name: root.name })
+          missing
+            ? t('sidebar.rootMissing', { name: root.name })
+            : locked
+              ? t('sidebar.rootLocked', { name: root.name })
+              : t('sidebar.rootHint', { name: root.name })
         }
         // 没授权时点击就是去要权限：requestPermission 只能在用户手势里发起，
         // 而这一行本身就是那个手势最自然的落点
@@ -454,7 +458,9 @@ function RootRow({
         className="relative flex min-w-0 flex-1 items-center gap-1.5 py-1 pe-1 text-start text-[13px]"
       >
         <span className={TWISTIE_SLOT}>
-          {locked ? (
+          {missing ? (
+            <Icon className="icon-[lucide--triangle-alert]" />
+          ) : locked ? (
             <Icon className="icon-[lucide--lock]" />
           ) : open ? (
             <Icon className="icon-[lucide--chevron-down]" />
@@ -475,7 +481,7 @@ function RootRow({
         </span>
         {locked && (
           <span className="ms-auto shrink-0 text-[11px] text-[var(--text-faint)]">
-            {t('sidebar.needAuth')}
+            {missing ? t('sidebar.missing') : t('sidebar.needAuth')}
           </span>
         )}
       </button>
@@ -1005,7 +1011,7 @@ export default function Sidebar({
   // 新建按钮的 title 要说清「建到哪」，否则用户看不出目标是哪个目录。
   // 多根之后路径里带的是内部 id，得先换成目录名。
   const targetLabel = workspace.displayPath(workspace.target)
-  const anyLocked = workspace.roots.some((root) => root.needsPermission)
+  const anyLocked = workspace.roots.some((root) => root.status === 'locked')
 
   return (
     <div
@@ -1146,7 +1152,7 @@ export default function Sidebar({
                   selected={selectedId === rootSelId(root.id)}
                   onSelect={() => setSelectedId(rootSelId(root.id))}
                 />
-                {!root.needsPermission && workspace.expanded.has(root.id) && (
+                {root.status === 'ready' && workspace.expanded.has(root.id) && (
                   <Tree
                     path={root.id}
                     depth={1}

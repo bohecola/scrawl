@@ -112,7 +112,7 @@ export function useDemoSaver({ workspace, confirm, t, setNotice }: UseDemoSaverO
       }
       // 优先用左侧已打开、且名字对得上的根目录 handle —— 它是最活跃、肯定可写的那个
       const openRoot = workspace.roots.find(
-        (r) => !r.needsPermission && r.handle.name === record.parent.name
+        (r) => r.status === 'ready' && r.handle.name === record.parent.name
       )
       const target = openRoot?.handle ?? record.parent
       const perm = await queryPermission(target, 'readwrite').catch(() => 'unavailable')
@@ -172,7 +172,7 @@ export function useDemoSaver({ workspace, confirm, t, setNotice }: UseDemoSaverO
       if (savingMark) {
         const found: { root: WorkspaceRoot; demo: ResidualDemo }[] = []
         for (const root of workspace.roots) {
-          if (root.needsPermission) continue
+          if (root.status !== 'ready') continue
           const demos = await workspace.detectResidualDemos(root)
           for (const demo of demos) found.push({ root, demo })
         }
@@ -182,7 +182,7 @@ export function useDemoSaver({ workspace, confirm, t, setNotice }: UseDemoSaverO
       // 4) 纯磁盘扫描兜底：记录丢了也没标记（比如旧版本），主动扫已授权 root
       const found: { root: WorkspaceRoot; demo: ResidualDemo }[] = []
       for (const root of workspace.roots) {
-        if (root.needsPermission) continue
+        if (root.status !== 'ready') continue
         const demos = await workspace.detectResidualDemos(root)
         for (const demo of demos) found.push({ root, demo })
       }

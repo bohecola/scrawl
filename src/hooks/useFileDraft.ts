@@ -105,7 +105,7 @@ export function useFileDraft(
   // 目录被关掉（或者变成「需要授权」）时输入框不能留在那儿悬着。
   // 这里直接在渲染时算掉，而不是用 effect 去清 state —— 少一轮渲染，也不用管时序。
   const parentRoot = pending ? workspace.rootOf(pending.parentPath) : null
-  const draft = parentRoot && !parentRoot.needsPermission ? pending : null
+  const draft = parentRoot && parentRoot.status === 'ready' ? pending : null
   const setDraft = setPending
 
   const fail = (error: Problem) => setDraft((prev) => (prev ? { ...prev, error } : prev))
