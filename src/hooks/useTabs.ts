@@ -15,6 +15,17 @@ interface UseTabsOptions {
   onEmpty: () => void
   /** 一批标签真的关掉了（确认过、model 已 close）。App 用它清掉未命名文件的持久化记录 */
   onClosed?: (keys: string[]) => void
+  /**
+   * 关闭脏标签时选了「保存」。返回 true 表示文件已经干净、可以接着关；
+   * false 表示没保存成或者保存还在路上（未命名文件要先在侧栏里起名），这次关闭到此为止
+   */
+  onSave?: (file: ActiveFile) => Promise<boolean>
+  /**
+   * 这个文件「保存」是不是真的能落到某个地方（本地文件写盘、未命名存进已打开的目录）。
+   * 能才给「保存 / 不保存 / 取消」；不能（保存等于下载）就只问「关闭？确认 / 取消」——
+   * 关标签的时候冒出一个下载，不是用户想要的
+   */
+  canSave?: (file: ActiveFile) => boolean
 }
 
 /*
@@ -27,7 +38,7 @@ interface UseTabsOptions {
   active / dirtyKeys 各同步一份到 ref 供回调用。写 ref 放在 effect 里而不是渲染中：
   渲染阶段写 ref 会被 react-hooks 规则拦下，而这些 ref 只有用户交互时才读，晚一个 commit 也没关系。
 */
-export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOptions) {
+export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canSave }: UseTabsOptions) {
   const [tabs, setTabs] = useState<ActiveFile[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const active = tabs.find((x) => x.key === activeKey) ?? null
@@ -50,9 +61,13 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOpt
   // 直接放进依赖数组会绕成环
   const onEmptyRef = useRef(onEmpty)
   const onClosedRef = useRef(onClosed)
+  const onSaveRef = useRef(onSave)
+  const canSaveRef = useRef(canSave)
   useEffect(() => {
     onEmptyRef.current = onEmpty
     onClosedRef.current = onClosed
+    onSaveRef.current = onSave
+    canSaveRef.current = canSave
   })
 
   // 让 Editor 保住所有打开标签的 model（不被 LRU 淘汰），这样切标签时不重读盘、不丢光标。
@@ -93,7 +108,8 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOpt
     setActiveKey(file.key)
   }, [])
 
-  // 关闭某标签（供标签栏 × 用）。脏的走二次确认；关闭激活标签则切到相邻标签；
+  // 关闭某标签（供标签栏 × 用）。脏的且能保存，问「保存 / 不保存 / 取消」（同 VS Code）；
+  // 脏的但保存无处可去，问「关闭？确认 / 取消」。关闭激活标签则切到相邻标签；
   // 关到最后一个就调 onEmpty（App 用它开一份新的未命名文件，与删除当前文件后一致）。
   // 注意读的都是 live ref / 本处可拿到的稳定量 —— 关闭确认可能跨 await，不能吃旧 state。
   const closeTab = useCallback(
@@ -102,13 +118,25 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOpt
       const file = curTabs.find((x) => x.key === key)
       if (!file) return
       if (dirtyRef.current.has(key)) {
-        const ok = await confirm.ask({
-          title: t('confirm.closeTab.title', { name: file.name }),
-          lines: [t('confirm.closeTab.unsaved')],
-          confirmText: t('confirm.closeTab.ok'),
-          tone: 'danger',
-        })
-        if (!ok) return
+        if (onSaveRef.current && canSaveRef.current?.(file)) {
+          const choice = await confirm.choose({
+            title: t('confirm.closeTab.title', { name: file.name }),
+            lines: [t('confirm.closeTab.unsaved')],
+            confirmText: t('confirm.closeTab.save'),
+            alt: { text: t('confirm.closeTab.discard'), tone: 'danger' },
+          })
+          if (choice === 'cancel') return
+          if (choice === 'confirm' && !(await onSaveRef.current(file))) return
+        } else {
+          const ok = await confirm.ask({
+            title: t('confirm.discardTab.title', { name: file.name }),
+            // 未命名的从来没保存过，丢的是全部内容；其它的丢的是改动
+            lines: [t(file.kind === 'untitled' ? 'confirm.discardTab.untitled' : 'confirm.discardTab.unsaved')],
+            confirmText: t('confirm.ok'),
+            tone: 'danger',
+          })
+          if (!ok) return
+        }
       }
       editorRef.current?.close(key)
       handleDirtyChange(key, false)
@@ -152,7 +180,9 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOpt
   }, [editorRef])
 
   // 批量关闭一批标签（标签右键菜单：关闭其他/右侧/全部）。只要这批里含未保存的脏标签，
-  // 就先弹一次确认带过整批；然后逐个 editor.close 并从 tabs 里移除；若删掉了当前激活的，
+  // 就先问一次带过整批：脏的全是本地文件时给「全部保存 / 不保存 / 取消」，
+  // 否则（有未命名的得逐个起名，批量存不了；内置 / 导入的存了也只是下载）问「关闭？确认 / 取消」；
+  // 然后逐个 editor.close 并从 tabs 里移除；若删掉了当前激活的，
   // 就在剩余里选一个激活（优先 prefer，其次最左），一个不剩就调 onEmpty。
   const closeMany = useCallback(
     async (keysToClose: string[], prefer?: string) => {
@@ -160,16 +190,33 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed }: UseTabsOpt
       const kset = new Set(keysToClose)
       const targets = curTabs.filter((x) => kset.has(x.key))
       if (targets.length === 0) return
-      const dirtyCount = targets.filter((x) => dirtyRef.current.has(x.key)).length
-      if (dirtyCount > 0) {
-        const ok = await confirm.ask({
-          // 复数键 confirm.closeMany.title：单复数由 count 经 CLDR 规则选择
-          title: t('confirm.closeMany.title', { count: dirtyCount }),
-          lines: [t('confirm.closeMany.unsaved')],
-          confirmText: t('confirm.closeTab.ok'),
-          tone: 'danger',
-        })
-        if (!ok) return
+      const dirtyTargets = targets.filter((x) => dirtyRef.current.has(x.key))
+      if (dirtyTargets.length > 0) {
+        const canSaveAll = !!onSaveRef.current && dirtyTargets.every((x) => x.kind === 'local' && x.handle)
+        // 复数键：单复数由 count 经 CLDR 规则选择
+        const count = dirtyTargets.length
+        if (canSaveAll) {
+          const choice = await confirm.choose({
+            title: t('confirm.closeMany.title', { count }),
+            lines: [t('confirm.closeMany.unsaved')],
+            confirmText: t('confirm.closeMany.saveAll'),
+            alt: { text: t('confirm.closeTab.discard'), tone: 'danger' },
+          })
+          if (choice === 'cancel') return
+          if (choice === 'confirm') {
+            for (const x of dirtyTargets) {
+              if (!(await onSaveRef.current!(x))) return
+            }
+          }
+        } else {
+          const ok = await confirm.ask({
+            title: t('confirm.discardMany.title', { count }),
+            lines: [t('confirm.discardMany.body')],
+            confirmText: t('confirm.ok'),
+            tone: 'danger',
+          })
+          if (!ok) return
+        }
       }
       for (const x of targets) {
         editorRef.current?.close(x.key)

@@ -99,6 +99,9 @@ function App() {
     onEmpty: () => openUntitled(),
     // 关掉的未命名文件从 IndexedDB 里删掉，不然下次刷新它又回来了
     onClosed: (keys) => keys.filter(isUntitledKey).forEach((key) => untitled.remove(key)),
+    // 关闭脏标签时点了「保存」；只有保存真能落地时才给这个选项（否则保存 = 下载）
+    onSave: (file) => saveFile(file),
+    canSave: (file) => (file.kind === 'local' && !!file.handle) || (file.kind === 'untitled' && workspace.hasRoot),
   })
   const untitled = useUntitled()
 
@@ -611,50 +614,64 @@ function App() {
     downloadCode(active, editorRef.current?.getValue(active.key) ?? '')
   }
 
-  /** Ctrl+S：本地文件写回磁盘；未命名文件在开着本地目录时存进选中的目录；其余退回下载。 */
-  const handleSave = useCallback(async () => {
-    // 防重入：上一次还没写完就不要再排一个。用 ref 而不是 state —— 保存可能很快，
-    // state 更新是异步的，两个连续的 Ctrl+S 会读不到刚 set 的 true
-    if (savingRef.current) return
-    const file = activeRef.current
-    if (!file) return
-    const code = editorRef.current?.getValue(file.key) ?? ''
+  /**
+   * 保存一个文件：本地文件写回磁盘；未命名文件在开着本地目录时存进选中的目录；其余退回下载。
+   * 返回「现在可以当它已经保存了吗」：写盘成功 / 已下载为 true；写盘失败为 false；
+   * 未命名进了起名流程也是 false —— 真正的落盘在用户回车之后（见 fileDraft.onOpenFile）。
+   * Ctrl+S 和关闭脏标签时的「保存」都走这里。
+   */
+  const saveFile = useCallback(
+    async (file: ActiveFile): Promise<boolean> => {
+      const code = editorRef.current?.getValue(file.key) ?? ''
 
-    if (file.kind !== 'local' || !file.handle) {
-      // 未命名 + 已经打开了本地目录：它缺的只是一个名字和一个位置，
-      // 让用户在侧边栏里补上，比丢进下载目录有用得多
-      if (file.kind === 'untitled' && workspace.hasRoot) {
-        promotingKeyRef.current = file.key
-        fileDraft.start('file', {
-          content: code,
-          defaultName: `${file.name}.${file.language === 'typescript' ? 'ts' : 'js'}`,
-        })
-        setNotice({
-          tone: 'info',
-          text: t('notice.draftWillSaveTo', { path: displayPath(workspace.target) }),
-        })
-        return
+      if (file.kind !== 'local' || !file.handle) {
+        // 未命名 + 已经打开了本地目录：它缺的只是一个名字和一个位置，
+        // 让用户在侧边栏里补上，比丢进下载目录有用得多
+        if (file.kind === 'untitled' && workspace.hasRoot) {
+          promotingKeyRef.current = file.key
+          fileDraft.start('file', {
+            content: code,
+            defaultName: `${file.name}.${file.language === 'typescript' ? 'ts' : 'js'}`,
+          })
+          setNotice({
+            tone: 'info',
+            text: t('notice.draftWillSaveTo', { path: displayPath(workspace.target) }),
+          })
+          return false
+        }
+        downloadCode(file, code)
+        setNotice({ tone: 'info', text: t('notice.noWriteTarget') })
+        return true
       }
-      downloadCode(file, code)
-      setNotice({ tone: 'info', text: t('notice.noWriteTarget') })
-      return
-    }
-    savingRef.current = true
-    setSaving(true)
-    try {
-      const lastModified = await writeTextFile(file.handle, code)
-      localMetaRef.current.set(file.key, { handle: file.handle, lastModified })
-      editorRef.current?.markSaved(file.key)
-      setNotice({ tone: 'info', text: t('notice.saved', { name: file.name }) })
-    } catch (err) {
-      setNotice({ tone: 'error', text: t('notice.saveFailed', { message: messageOf(err, t) }) })
-    } finally {
-      savingRef.current = false
-      setSaving(false)
-    }
-    // fileDraft 每次渲染都是新对象，这个 useCallback 实际不再缓存 —— 无所谓：
-    // Editor 是通过 ref 读 onSave 的，换个函数身份不会让它重建
-  }, [activeRef, setNotice, workspace.hasRoot, workspace.target, displayPath, fileDraft, t])
+      // 防重入：上一次还没写完就不要再排一个。用 ref 而不是 state —— 保存可能很快，
+      // state 更新是异步的，两个连续的 Ctrl+S 会读不到刚 set 的 true
+      if (savingRef.current) return false
+      savingRef.current = true
+      setSaving(true)
+      try {
+        const lastModified = await writeTextFile(file.handle, code)
+        localMetaRef.current.set(file.key, { handle: file.handle, lastModified })
+        editorRef.current?.markSaved(file.key)
+        setNotice({ tone: 'info', text: t('notice.saved', { name: file.name }) })
+        return true
+      } catch (err) {
+        setNotice({ tone: 'error', text: t('notice.saveFailed', { message: messageOf(err, t) }) })
+        return false
+      } finally {
+        savingRef.current = false
+        setSaving(false)
+      }
+      // fileDraft 每次渲染都是新对象，这个 useCallback 实际不再缓存 —— 无所谓：
+      // Editor 是通过 ref 读 onSave 的，换个函数身份不会让它重建
+    },
+    [setNotice, workspace.hasRoot, workspace.target, displayPath, fileDraft, t]
+  )
+
+  /** Ctrl+S：保存当前激活的文件 */
+  const handleSave = useCallback(async () => {
+    const file = activeRef.current
+    if (file) await saveFile(file)
+  }, [activeRef, saveFile])
 
 
   useExternalChangeWatcher({ activeRef, dirtyRef, localMetaRef, editorRef, setTabs, setNotice, t })

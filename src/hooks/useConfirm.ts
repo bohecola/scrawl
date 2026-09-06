@@ -19,38 +19,54 @@ export interface ConfirmRequest {
   confirmText: string
   /** danger：确认按钮用红色。留给不可逆的操作 */
   tone?: 'default' | 'danger'
+  /**
+   * 可选的第三个按钮，排在取消和确认之间。给「保存 / 不保存 / 取消」这种三选一用：
+   * 确认是「保存」，alt 是红色的「不保存」。
+   */
+  alt?: { text: string; tone?: 'default' | 'danger' }
 }
+
+/** 弹窗的结果：confirm = 主按钮，alt = 第三个按钮，cancel = 取消 / Esc / 点外面 */
+export type ConfirmChoice = 'confirm' | 'alt' | 'cancel'
 
 export interface Confirm {
   /** 当前要问的事，null 表示弹窗关着 */
   request: ConfirmRequest | null
+  /** 两个按钮的问法：true = 点了确认 */
   ask: (request: ConfirmRequest) => Promise<boolean>
-  /** 由弹窗调用：true = 点了确认，false = 取消 / Esc / 点外面 */
-  settle: (ok: boolean) => void
+  /** 三个按钮的问法，拿到具体点了哪个 */
+  choose: (request: ConfirmRequest) => Promise<ConfirmChoice>
+  /** 由弹窗调用 */
+  settle: (choice: ConfirmChoice) => void
 }
 
 export function useConfirm(): Confirm {
   const [request, setRequest] = useState<ConfirmRequest | null>(null)
-  const resolveRef = useRef<((ok: boolean) => void) | null>(null)
+  const resolveRef = useRef<((choice: ConfirmChoice) => void) | null>(null)
 
-  const ask = useCallback((next: ConfirmRequest) => {
+  const choose = useCallback((next: ConfirmRequest) => {
     // 上一个还没结（正常流程走不到，弹窗是模态的）：当成取消结掉，
     // 否则那个 await 会永远悬着，调用方的 busy 状态也就永远下不来
-    resolveRef.current?.(false)
+    resolveRef.current?.('cancel')
     setRequest(next)
-    return new Promise<boolean>((resolve) => {
+    return new Promise<ConfirmChoice>((resolve) => {
       resolveRef.current = resolve
     })
   }, [])
 
+  const ask = useCallback(
+    (next: ConfirmRequest) => choose(next).then((choice) => choice === 'confirm'),
+    [choose]
+  )
+
   // 按钮的 onClick 和 onOpenChange(false) 会一前一后都进来，第二次是空转
-  const settle = useCallback((ok: boolean) => {
+  const settle = useCallback((choice: ConfirmChoice) => {
     setRequest(null)
-    resolveRef.current?.(ok)
+    resolveRef.current?.(choice)
     resolveRef.current = null
   }, [])
 
   // 返回稳定对象：调用方把 confirm 整个放进 useCallback / useEffect 的依赖里，
   // 每次渲染换一个新对象会让那些缓存全部失效，效果比不写 useCallback 还糟
-  return useMemo(() => ({ request, ask, settle }), [request, ask, settle])
+  return useMemo(() => ({ request, ask, choose, settle }), [request, ask, choose, settle])
 }
