@@ -1,55 +1,55 @@
 # Jotter
 
-> [English](./README.en.md) | 中文
+> English | [中文](./README.zh-CN.md)
 
-**Jotter** 是一个在线运行 JavaScript / TypeScript 代码的草稿纸。写一段代码，点一下运行，立刻在右侧 Console 看到输出。
+**Jotter** is an online scratchpad for running JavaScript and TypeScript code. Write a snippet, hit run, and see the console output immediately.
 
-## 特性
+## Features
 
-| 特性 | 说明 |
+| Feature | Description |
 | --- | --- |
-| 即时运行 | 代码跑在独立 Web Worker 里，不卡界面；支持顶层 `await`，`while (true)` 也能一键终止。 |
-| Monaco 编辑器 | VS Code 同款编辑器，带语法高亮、自动补全和 TypeScript 类型检查；多标签页，字号、编辑器主题、文件图标都可在设置里调。 |
-| 未命名文件 | 不打开任何文件夹也能直接写：未命名文件存在浏览器本地，刷新不丢；开着文件夹时按 Ctrl+S 起个名字就存进去。 |
-| 本地文件系统 | 通过浏览器文件系统 API 打开本地文件夹（可同时打开多个），在侧边栏里浏览目录树，编辑、保存、重命名、删除文件，本地文件之间支持相对路径 `import`。 |
-| 内置 Demo | 自带一组可直接运行的示例片段，可一键存到本地再改。 |
-| 多语言 | 界面提供 11 种语言（含阿拉伯语的从右到左布局），默认跟随系统，在设置里切换。 |
-| 主题 | 深色 / 浅色跟随系统或手动指定，另有 7 种配色可选。 |
+| Instant execution | Code runs in a dedicated Web Worker, so the UI stays responsive; top-level `await` works and `while (true)` loops can be stopped with one click. |
+| Monaco editor | The same editor that powers VS Code, with syntax highlighting, autocompletion, and TypeScript type checking; multiple tabs, with font size, editor theme, and file icons adjustable in settings. |
+| Untitled files | Start writing without opening any folder: untitled files are kept in the browser and survive reloads; with a folder open, Ctrl+S names the file and saves it there. |
+| Local file system | Open local folders (several at once) via the browser's File System Access API, browse the directory tree in the sidebar, edit/save/rename/delete files, and use relative `import`s between local files. |
+| Built-in demos | A set of ready-to-run examples; save them all to a local folder with one click to modify. |
+| Multilingual UI | 11 interface languages (including right-to-left layout for Arabic), following the system language by default and switchable in settings. |
+| Themes | Dark / light following the system or set by hand, plus 7 accent colors. |
 
-> 说明：Jotter 是代码草稿纸，只运行 JavaScript / TypeScript 并展示 Console 输出，**不是** HTML / CSS 实时预览器。
+> Note: Jotter is a code scratchpad — it runs JavaScript / TypeScript and shows console output. It is **not** an HTML / CSS live preview tool.
 
-## 技术栈
+## Tech Stack
 
-React · TypeScript · Web Worker · Vite · Monaco Editor · shadcn/ui（Radix + Tailwind）
+React · TypeScript · Web Worker · Vite · Monaco Editor · shadcn/ui (Radix + Tailwind)
 
-## 环境要求
+## Prerequisites
 
-- [Node.js](https://nodejs.org/)（推荐使用较新的 LTS 版本）
-- [pnpm](https://pnpm.io/)（本仓库通过 `packageManager` 固定为 `pnpm@10.20.0`）
+- [Node.js](https://nodejs.org/) (a recent LTS version is recommended)
+- [pnpm](https://pnpm.io/) (pinned to `pnpm@10.20.0` via the repo's `packageManager` field)
 
-## 安装依赖
+## Install Dependencies
 
 ```sh
 pnpm install
 ```
 
-## 本地运行
+## Run Locally
 
 ```sh
 pnpm dev
 ```
 
-然后在浏览器中打开终端输出的地址（默认 <http://localhost:5173/>）。
+Then open the address printed in the terminal (default <http://localhost:5173/>) in your browser.
 
-## 构建与检查
+## Build & Check
 
 ```sh
-pnpm build   # 类型检查 + 生产构建（产物在 dist/）
-pnpm lint    # 代码检查（--max-warnings 0，任何告警都会失败）
+pnpm build   # type-check + production build (output in dist/)
+pnpm lint    # code linting (--max-warnings 0; any warning fails)
 ```
 
-## 在线体验
+## Try It Online
 
-在线地址：[playground.deore.me](https://playground.deore.me/)
+Online playground: [playground.deore.me](https://playground.deore.me/)
 
-![Jotter 界面预览](/src/assets/imgs/preview.png?v=5)
+![Jotter UI preview](/src/assets/imgs/preview.png?v=5)
