@@ -723,8 +723,6 @@ export interface SidebarProps {
   templates: readonly string[]
   activeKey: string | null
   dirtyKeys: Set<string>
-  /** 开一份空白草稿。不落在任何目录里，Ctrl+S 时再决定存到哪 */
-  onNewScratch: () => void
   onOpenTemplate: (path: string) => void
   onOpenLocalFile: (entry: FileEntry) => void
   /** 「把全部 Demo 存到本地文件夹」。选文件夹、落盘、接管成根都在 App 那边 */
@@ -756,7 +754,6 @@ export default function Sidebar({
   templates,
   activeKey,
   dirtyKeys,
-  onNewScratch,
   onOpenTemplate,
   onOpenLocalFile,
   onSaveDemos,
@@ -1024,20 +1021,7 @@ export default function Sidebar({
       <div className="flex items-center justify-between px-3 py-2">
         <span className="text-sm text-[var(--text-muted)]">{t('sidebar.title')}</span>
         <div className="flex items-center">
-          {/* 「新建草稿」原来在顶部工具栏上。挪到这里是因为它和下面那些新建一样是
-              「开一份新东西」，只是它不落在任何目录里；顶栏留给运行相关的东西。
-              图标沿用顶栏那个 lucide file-plus，而不是下面那排的 codicon new-file ——
-              后者的 title 是「在某个目录中新建文件」，两件事不能长成一个样 */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title={t('sidebar.newScratch')}
-            aria-label={t('sidebar.newScratch')}
-            className="text-[var(--text-muted)]"
-            onClick={onNewScratch}
-          >
-            <Icon className="icon-[lucide--file-plus]" />
-          </Button>
+          {/* 「新建文件」不在这里：未命名文件的家是标签栏（末尾的「+」/ Alt+N），侧栏只列磁盘上和内置的东西 */}
           <Button
             variant="ghost"
             size="icon-sm"

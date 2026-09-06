@@ -19,6 +19,12 @@ export interface OpenFileSpec {
   key: string
   value: string
   language: string
+  /**
+   * 新建 model 时就算脏，直到 markSaved / replace 才干净。
+   * 给刷新后恢复的未命名文件用：内容从 IndexedDB 来，但它还没落过盘，
+   * 标签上的点得接着亮，不能因为「和恢复出来的基线一样」就当已保存。
+   */
+  dirty?: boolean
 }
 
 /**
@@ -56,7 +62,7 @@ export interface EditorHandle {
   close: (key: string) => void
   /**
    * 改名：把内容、脏状态、光标 / 滚动搬到新 key 上，旧 model 丢掉。
-   * 撤销历史留不住 —— model 的 URI 改不了，只能新建一个（和「草稿转正」一样的取舍）。
+   * 撤销历史留不住 —— model 的 URI 改不了，只能新建一个（和「未命名转正」一样的取舍）。
    * 和 close 一样不为旧 key 发 onDirtyChange，由调用方自己清。
    */
   rekey: (oldKey: string, newKey: string, language?: string) => void
@@ -65,6 +71,8 @@ export interface EditorHandle {
 
 interface EditorProps {
   onDirtyChange?: (key: string, dirty: boolean) => void
+  /** 内容变了（用户编辑；replace 之类的程序性替换不算）。未命名文件靠它持久化 */
+  onChange?: (key: string, value: string) => void
   onSave?: () => void
   /** Ctrl/Cmd+Enter */
   onRun?: () => void
@@ -72,6 +80,8 @@ interface EditorProps {
   onStop?: () => void
   /** Alt+W：关闭当前标签。⌘W / Ctrl+W 被浏览器保留，见 platform.ts 的 shortcut.closeTab */
   onCloseTab?: () => void
+  /** Alt+N：新建未命名文件。⌘N / Ctrl+N 同样归浏览器 */
+  onNewFile?: () => void
   /** 光标位置或 model（切换文件）变化时上报当前光标 + 缩进，驱动状态栏 */
   onCursorStatus?: (status: CursorStatus) => void
 }
@@ -107,22 +117,24 @@ function editorOptions(s: EditorSettings): MonacoEditorType.IEditorOptions {
 }
 
 const Editor = forwardRef<EditorHandle, EditorProps>(
-  ({ onDirtyChange, onSave, onRun, onStop, onCloseTab, onCursorStatus }, ref) => {
+  ({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus }, ref) => {
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const modelsRef = useRef(new Map<string, ModelRecord>())
   const activeKeyRef = useRef<string | null>(null)
   // 顶部标签对应的 key 集合：这些 model 常驻、不被 LRU 淘汰。App 每次改标签集合都会同步
   const pinnedRef = useRef(new Set<string>())
-  // 挂载 effect 跑之前 App 就可能调 open（父组件的 effect 后于子组件），先记下来
-  const pendingOpenRef = useRef<OpenFileSpec | null>(null)
+  // 挂载 effect 跑之前 App 就可能调 open（父组件的 effect 后于子组件），先记下来。
+  // 是个队列而不是一个：启动时恢复多份未命名文件会连着 open 好几次，每一份的内容都得建成 model，
+  // 只留最后一次的话，其余的在之后切过去时会被当成空文件重建
+  const pendingOpenRef = useRef<OpenFileSpec[]>([])
   const { effective } = useTheme()
   const { settings } = useSettings()
 
   // 回调走 ref：Monaco 命令和 window 监听都只注册一次，
   // 直接闭包捕获 prop 会永远调用首次渲染那一版
-  const callbacksRef = useRef({ onDirtyChange, onSave, onRun, onStop, onCloseTab, onCursorStatus })
-  callbacksRef.current = { onDirtyChange, onSave, onRun, onStop, onCloseTab, onCursorStatus }
+  const callbacksRef = useRef({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus })
+  callbacksRef.current = { onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus }
 
   // 创建 effect 刻意不依赖主题，用 ref 读当前值 —— 主题变化由下面的 effect 增量应用，
   // 放进依赖数组会让编辑器被重建
@@ -180,15 +192,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
       const rec: ModelRecord = {
         model,
         viewState: null,
-        savedVersionId: model.getAlternativeVersionId(),
+        // dirty 的 model 基线给一个永远对不上的版本号：怎么改都是脏，直到 markSaved / replace 重置
+        savedVersionId: file.dirty ? -1 : model.getAlternativeVersionId(),
         dirty: false,
         listener: model.onDidChangeContent(() => {
           if (applying) return
           notifyDirty(file.key, model.getAlternativeVersionId() !== rec.savedVersionId)
+          callbacksRef.current.onChange?.(file.key, model.getValue())
         }),
         lastUsed: 0,
       }
       modelsRef.current.set(file.key, rec)
+      if (file.dirty) notifyDirty(file.key, true)
       return rec
     }
 
@@ -201,7 +216,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
       open: (file) => {
         const editor = editorRef.current
         if (!editor) {
-          pendingOpenRef.current = file
+          pendingOpenRef.current.push(file)
           return
         }
         // 先把离开的那个文件的视图状态收好（光标、滚动、折叠）
@@ -333,6 +348,9 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
     editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyW, () => {
       callbacksRef.current.onCloseTab?.()
     })
+    editor.addCommand(monaco.KeyMod.Alt | monaco.KeyCode.KeyN, () => {
+      callbacksRef.current.onNewFile?.()
+    })
 
     // 状态栏的「Ln, Col / 缩进」：光标动了或换 model 就上报一次。缩进配置在 model 上
     // （Monaco 会按文件内容自动推断空格 / Tab 和宽度），随 model 一起读即可。
@@ -353,10 +371,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
     reportStatus()
 
     const pending = pendingOpenRef.current
-    if (pending) {
-      pendingOpenRef.current = null
-      api.open(pending)
-    }
+    pendingOpenRef.current = []
+    for (const file of pending) api.open(file)
 
     window.addEventListener('resize', handleResize)
 
@@ -390,6 +406,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
       else if (mod && e.key === 'Enter') action = callbacksRef.current.onRun
       else if (e.shiftKey && e.key === 'F5') action = callbacksRef.current.onStop
       else if (altOnly && e.code === 'KeyW') action = callbacksRef.current.onCloseTab
+      else if (altOnly && e.code === 'KeyN') action = callbacksRef.current.onNewFile
       if (!action) return
       e.preventDefault()
       action()

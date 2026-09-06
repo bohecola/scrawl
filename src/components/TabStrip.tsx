@@ -38,6 +38,8 @@ interface TabStripProps {
   onCloseOthers: (key: string) => void
   onCloseToRight: (key: string) => void
   onCloseAll: () => void
+  /** 标签栏末尾的「+」和 Alt+N：新开一份未命名文件 */
+  onNew: () => void
 }
 
 /**
@@ -54,6 +56,7 @@ export function TabStrip({
   onCloseOthers,
   onCloseToRight,
   onCloseAll,
+  onNew,
 }: TabStripProps) {
   const { t } = useI18n()
   const { settings } = useSettings()
@@ -171,7 +174,7 @@ export function TabStrip({
     {tabs.map((tab) => {
       const isActive = tab.key === activeKey
       const dirtyTab = dirtyKeys.has(tab.key)
-      const tabName = tab.kind === 'scratch' ? t('file.scratch') : tab.name
+      const tabName = tab.name
       return (
         <ContextMenu key={tab.key}>
           <ContextMenuTrigger asChild>
@@ -253,6 +256,16 @@ export function TabStrip({
         </ContextMenu>
       )
     })}
+      {/* 新建未命名文件。贴在最后一个标签后面（同浏览器的「+」），跟着标签一起横滚 */}
+      <button
+        type="button"
+        onClick={onNew}
+        title={`${t('tab.new')} (${shortcut.newFile})`}
+        aria-label={t('tab.new')}
+        className="my-auto ms-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--panel-hover)] hover:text-[var(--text-body)]"
+      >
+        <Icon className="icon-[lucide--plus] size-4" />
+      </button>
       </div>
       {/* 悬浮进度条：绝对贴容器底部、不占高度，方形直角、3px 半透明（同 VS Code），
           悬停标签栏才浮现；只在标签溢出时出现。浮现后可按住 thumb 左右拖拽横滚 */}

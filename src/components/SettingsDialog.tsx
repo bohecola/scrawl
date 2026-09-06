@@ -139,6 +139,7 @@ const APP_SHORTCUTS: ShortcutRow[] = [
   { labelKey: 'editor.save', combos: [[K.mod, 'S']] },
   // ⌘W / Ctrl+W 归浏览器，见 lib/platform.ts 的 shortcut.closeTab
   { labelKey: 'tab.close', combos: [[K.alt, 'W']] },
+  { labelKey: 'tab.new', combos: [[K.alt, 'N']] },
   { labelKey: 'settings.shortcuts.rename', combos: isMac ? [[K.enter], ['F2']] : [['F2']] },
 ]
 

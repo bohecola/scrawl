@@ -23,7 +23,7 @@ export function StatusBar({ active, cursor, language, displayPath, message }: St
   const { t } = useI18n()
   // 底部状态栏左侧要展示「目录 + 文件名」，像 VS Code 那样一条横排、目录淡色文件名高亮。
   // 只有 local（key=local:<相对根路径>）与 builtin（name 本身就是它相对 demo 根的子路径，
-  // 例如 overrides/promise-order.js）带目录可拆；导入 / 草稿没有目录归属，只显示裸名。
+  // 例如 overrides/promise-order.js）带目录可拆；导入 / 未命名没有目录归属，只显示裸名。
   const footerLoc =
     active == null
       ? null

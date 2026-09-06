@@ -11,6 +11,7 @@ import { StatusBar } from './components/StatusBar'
 import { TabStrip } from './components/TabStrip'
 import { useNotice } from './hooks/useNotice'
 import { useTabs, ACTIVE_KEY } from './hooks/useTabs'
+import { useUntitled, untitledKey, isUntitledKey } from './hooks/useUntitled'
 import { useDemoSaver } from './hooks/useDemoSaver'
 import { useExternalChangeWatcher } from './hooks/useExternalChangeWatcher'
 import type { ActiveFile, Language, LocalMeta } from './types'
@@ -89,7 +90,15 @@ function App() {
     menuCloseOthers,
     menuCloseToRight,
     menuCloseAll,
-  } = useTabs({ editorRef, confirm, t, onEmpty: () => openScratch() })
+  } = useTabs({
+    editorRef,
+    confirm,
+    t,
+    onEmpty: () => openUntitled(),
+    // 关掉的未命名文件从 IndexedDB 里删掉，不然下次刷新它又回来了
+    onClosed: (keys) => keys.filter(isUntitledKey).forEach((key) => untitled.remove(key)),
+  })
+  const untitled = useUntitled()
 
   // Alt+W：关掉当前激活的标签（⌘W / Ctrl+W 归浏览器，拦不住）
   const closeActiveTab = useCallback(() => {
@@ -257,41 +266,36 @@ function App() {
   )
 
   /**
-   * 切到草稿标签。model 可能早就存在（上次的草稿），open 不会动它的内容。
-   * reset 才清空 —— 只有「新建草稿」这一个入口该清；关掉最后一个标签、删掉当前文件之类的
-   * 兜底路径只是需要一个能落脚的标签，不能顺手把用户写在草稿里的东西抹掉。
+   * 未命名文件（Untitled-N）。不落在任何目录里，可以开多份，内容存在 IndexedDB 里（见 hooks/useUntitled）。
+   * openUntitled 新建一份并切过去；restoreUntitled 在启动时把上次的全部开成标签（不激活）。
+   * 首屏默认、标签全关掉后的兜底、上次的文件恢复失败，都走 openUntitled。
    */
-  const openScratch = useCallback(
-    (opts?: { reset?: boolean }) => {
-      const key = 'scratch'
-      editorRef.current?.open({ key, value: '', language: 'javascript' })
-      if (opts?.reset) editorRef.current?.replace(key, '')
-      openOrActivate({
-        key,
-        kind: 'scratch',
-        name: t('file.scratch'),
-        language: 'javascript',
-        encoding: 'UTF-8',
-      })
-      consoleRef.current?.clear()
-      editorRef.current?.focus()
-    },
-    [t, openOrActivate]
-  )
+  const openUntitled = useCallback(() => {
+    const row = untitled.create()
+    const key = untitledKey(row.n)
+    editorRef.current?.open({ key, value: '', language: row.language })
+    openOrActivate({
+      key,
+      kind: 'untitled',
+      name: t('file.untitled', { n: row.n }),
+      language: row.language,
+      encoding: 'UTF-8',
+    })
+    consoleRef.current?.clear()
+    editorRef.current?.focus()
+  }, [untitled, t, openOrActivate])
 
-  /** 侧栏的「新建草稿」：草稿里有没保存的内容就先问一句，再清空 */
-  const handleNewScratch = useCallback(async () => {
-    if (dirtyRef.current.has('scratch')) {
-      const ok = await confirm.ask({
-        title: t('confirm.newScratch.title'),
-        lines: [t('confirm.newScratch.body')],
-        confirmText: t('confirm.newScratch.ok'),
-        tone: 'danger',
-      })
-      if (!ok) return
+  const restoreUntitled = useCallback((): ActiveFile[] => {
+    const files: ActiveFile[] = []
+    for (const row of untitled.all()) {
+      const key = untitledKey(row.n)
+      // 有内容的恢复出来就是脏的：它还没落过盘，标签上的点得亮着
+      editorRef.current?.open({ key, value: row.content, language: row.language, dirty: row.content !== '' })
+      files.push({ key, kind: 'untitled', name: t('file.untitled', { n: row.n }), language: row.language, encoding: 'UTF-8' })
     }
-    openScratch({ reset: true })
-  }, [dirtyRef, confirm, t, openScratch])
+    setTabs((prev) => [...prev, ...files.filter((f) => !prev.some((x) => x.key === f.key))])
+    return files
+  }, [untitled, t, setTabs])
 
   /*
     删除 / 改名的收尾工作。
@@ -345,9 +349,9 @@ function App() {
       handleDirtyChange(key, false) // close 不触发 onDirtyChange
       localMetaRef.current.delete(key)
     }
-    // 标签栏里同步移除这些文件的标签；删掉的正是激活的那个就退回空白草稿。
+    // 标签栏里同步移除这些文件的标签；删掉的正是激活的那个就开一份新的未命名文件。
     // 不引入「一个都没打开」这种没验证过的状态（其它没删的标签仍在栏里，不影响）。
-    if (dropTabsByKeys(keys)) openScratch()
+    if (dropTabsByKeys(keys)) openUntitled()
     setNotice({ tone: 'info', text: t('notice.deleted', { name: entry.name }) })
   }
 
@@ -387,8 +391,8 @@ function App() {
       handleDirtyChange(key, false) // close 不触发 onDirtyChange
       localMetaRef.current.delete(key)
     }
-    // 标签栏同步移除；激活的那个就在这棵树里则退回空白草稿（和删除时一致）
-    if (dropTabsByKeys(keys)) openScratch()
+    // 标签栏同步移除；激活的那个就在这棵树里则开一份新的未命名文件（和删除时一致）
+    if (dropTabsByKeys(keys)) openUntitled()
     setNotice({ tone: 'info', text: t('notice.rootRemoved', { name: root.name }) })
   }
 
@@ -446,20 +450,25 @@ function App() {
     setNotice({ tone: 'info', text: t('notice.renamed', { name: to.name }) })
   }
 
-  // 新建文件 / 新建目录 / 草稿转正，都走侧边栏里那一个行内命名输入框。
-  // 状态放在这里而不是 Sidebar 里：草稿转正是从这边的「保存」发起的，两个入口共用它。
+  // 新建文件 / 新建目录 / 未命名转正，都走侧边栏里那一个行内命名输入框。
+  // 状态放在这里而不是 Sidebar 里：未命名转正是从这边的「保存」发起的，两个入口共用它。
+  /** 正在转正的那份未命名文件的 key：handleSave 发起，onOpenFile 收尾时要知道关哪一份 */
+  const promotingKeyRef = useRef<string | null>(null)
   const fileDraft = useFileDraft(workspace, confirm, {
-    onOpenFile: (entry, savedFromScratch) => {
+    onOpenFile: (entry, savedFromUntitled) => {
       void openLocalFile(entry).then(() => {
-        if (!savedFromScratch) return
-        // 草稿转正：内容已经在新 model 里了。旧的 scratch model 留着的话，
+        const key = promotingKeyRef.current
+        promotingKeyRef.current = null
+        if (!savedFromUntitled || !key) return
+        // 未命名转正：内容已经在新 model 里了。旧 model 留着的话，
         // 侧边栏和标题上会一直挂着一个「未保存」的点。
         // 撤销历史跟着它一起没 —— 换 model 就留不住，这里认了。
-        editorRef.current?.close('scratch')
-        handleDirtyChange('scratch', false) // close 不会触发 onDirtyChange
-        // 标签栏里那张「草稿」也撤掉 —— 它对应的 model 已关，留着会指到一个空标签。
+        editorRef.current?.close(key)
+        handleDirtyChange(key, false) // close 不会触发 onDirtyChange
+        untitled.remove(key)
+        // 标签栏里那张也撤掉 —— 它对应的 model 已关，留着会指到一个空标签。
         // 新保存的本地文件此刻已是激活标签（openLocalFile 把它激活了），activeKey 不用动
-        setTabs((prev) => prev.filter((x) => x.key !== 'scratch'))
+        setTabs((prev) => prev.filter((x) => x.key !== key))
         setNotice({ tone: 'info', text: t('notice.saved', { name: entry.name }) })
       })
     },
@@ -467,11 +476,13 @@ function App() {
     onNotice: setNotice,
   })
 
-  // 首屏打开哪个文件：优先接上次那个，没有就是一张白纸。
-  // 等 workspace.ready 是因为上次那个可能是本地文件，得先知道目录到底恢复没恢复。
+  // 首屏：先把上次的未命名文件全部恢复成标签，再决定激活哪个 —— 优先接上次那个，
+  // 接不上就落到恢复出来的第一份未命名上，一份都没有才新开一张白纸。
+  // 等 workspace.ready 是因为上次那个可能是本地文件，得先知道目录到底恢复没恢复；
+  // 等 untitled.ready 是因为未命名的内容在 IndexedDB 里。
   const bootedRef = useRef(false)
   useEffect(() => {
-    if (bootedRef.current || !workspace.ready) return
+    if (bootedRef.current || !workspace.ready || !untitled.ready) return
     bootedRef.current = true
 
     let saved: string | null = null
@@ -481,16 +492,34 @@ function App() {
       // 读不到就按默认来
     }
 
+    const restored = restoreUntitled()
+    // 不走 switchTab：它查的是 tabsLiveRef，而 restoreUntitled 刚 setTabs、ref 要下一个 commit 才跟上。
+    // model 在 restoreUntitled 里已经建好了，这里只需要把它设成激活并切过去
+    const activate = (file: ActiveFile) => {
+      setActiveKey(file.key)
+      editorRef.current?.open({ key: file.key, value: '', language: file.language })
+    }
+    const fallback = () => {
+      const first = restored[0]
+      if (first) activate(first)
+      else openUntitled()
+    }
+
+    const savedUntitled = saved && isUntitledKey(saved) ? restored.find((x) => x.key === saved) : undefined
+    if (savedUntitled) {
+      activate(savedUntitled)
+      return
+    }
     // 上次那个本地文件：path 的第一段是根 id，resolveFilePath 自己会判断
-    // 那个根这次在不在、有没有权限，拿不到就退回空白草稿
+    // 那个根这次在不在、有没有权限，拿不到就走兜底
     if (saved?.startsWith('local:')) {
       const path = saved.slice('local:'.length)
       void resolveFilePath(path)
         .then((handle) =>
-          handle ? openLocalFile({ kind: 'file', name: handle.name, path, handle }) : openScratch()
+          handle ? openLocalFile({ kind: 'file', name: handle.name, path, handle }) : fallback()
         )
         // 解析失败（目录已失效之类）也得有个能落脚的标签，别停在一个标签都没有的状态
-        .catch(() => openScratch())
+        .catch(fallback)
       return
     }
     // 上次在看某个 Demo 就接上（前提是它还在）。其余情况一律空白 ——
@@ -500,14 +529,16 @@ function App() {
       void openTemplate(builtin)
       return
     }
-    openScratch()
-  }, [workspace.ready, resolveFilePath, templates, openTemplate, openLocalFile, openScratch])
+    fallback()
+  }, [workspace.ready, untitled.ready, resolveFilePath, templates, openTemplate, openLocalFile, openUntitled, restoreUntitled, setActiveKey])
 
   // 正在写 demo、或有文件改了还没保存时离开/刷新：尽力弹一次确认。浏览器可能淡化甚至
   // 不显示自定义文案，但这是唯一不需要持久化就能拦一下的手段；
   // demo 那边真正的兜底在下面那条「上次没存完」提示。
+  // 未命名文件不算：它们的内容存在 IndexedDB 里，刷新不丢，不该为它拦人
+  const blockingDirty = [...dirtyKeys].some((key) => !isUntitledKey(key))
   useEffect(() => {
-    if (saveProgress === null && dirtyKeys.size === 0) return
+    if (saveProgress === null && !blockingDirty) return
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault()
       // 一些浏览器要求设置了 returnValue 才会弹
@@ -515,7 +546,7 @@ function App() {
     }
     window.addEventListener('beforeunload', onBeforeUnload)
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
-  }, [saveProgress, dirtyKeys])
+  }, [saveProgress, blockingDirty])
 
   function handleImport() {
     fileInputRef.current?.click()
@@ -561,7 +592,8 @@ function App() {
     const ext = file.language === 'typescript' ? 'ts' : 'js'
     // 内置 Demo 的 name 是带目录的相对路径，下载文件名不能有斜杠
     const base = file.name.split('/').pop() || `code.${ext}`
-    const filename = withLanguageExt(file.kind === 'scratch' ? `code.${ext}` : base, file.language)
+    // 未命名的名字没有后缀（「未命名-1」），按语言补一个
+    const filename = file.kind === 'untitled' ? `${file.name}.${ext}` : withLanguageExt(base, file.language)
 
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -577,7 +609,7 @@ function App() {
     downloadCode(active, editorRef.current?.getValue(active.key) ?? '')
   }
 
-  /** Ctrl+S：本地文件写回磁盘；草稿在开着本地目录时存进选中的目录；其余退回下载。 */
+  /** Ctrl+S：本地文件写回磁盘；未命名文件在开着本地目录时存进选中的目录；其余退回下载。 */
   const handleSave = useCallback(async () => {
     // 防重入：上一次还没写完就不要再排一个。用 ref 而不是 state —— 保存可能很快，
     // state 更新是异步的，两个连续的 Ctrl+S 会读不到刚 set 的 true
@@ -587,12 +619,13 @@ function App() {
     const code = editorRef.current?.getValue(file.key) ?? ''
 
     if (file.kind !== 'local' || !file.handle) {
-      // 草稿 + 已经打开了本地目录：它缺的只是一个名字和一个位置，
+      // 未命名 + 已经打开了本地目录：它缺的只是一个名字和一个位置，
       // 让用户在侧边栏里补上，比丢进下载目录有用得多
-      if (file.kind === 'scratch' && workspace.hasRoot) {
+      if (file.kind === 'untitled' && workspace.hasRoot) {
+        promotingKeyRef.current = file.key
         fileDraft.start('file', {
           content: code,
-          defaultName: t('file.untitled', { ext: file.language === 'typescript' ? 'ts' : 'js' }),
+          defaultName: `${file.name}.${file.language === 'typescript' ? 'ts' : 'js'}`,
         })
         setNotice({
           tone: 'info',
@@ -639,7 +672,7 @@ function App() {
   }
 
   // 跨文件 import 需要的能力（见 lib/module-graph.ts 的 ModuleHost）：只有本地目录里的文件
-  // 才有「所在目录」可以解析相对路径；草稿 / 内置示例 / 导入的文件传 null，runner 会报清楚
+  // 才有「所在目录」可以解析相对路径；未命名 / 内置示例 / 导入的文件传 null，runner 会报清楚
   function moduleHost(file: ActiveFile): ModuleHost | null {
     if (file.kind !== 'local') return null
     return {
@@ -681,7 +714,6 @@ function App() {
           templates={templates}
           activeKey={active?.key ?? null}
           dirtyKeys={dirtyKeys}
-          onNewScratch={() => void handleNewScratch()}
           onOpenTemplate={(path) => void openTemplate(path)}
           onOpenLocalFile={(entry) => void openLocalFile(entry)}
           onSaveDemos={() => void saveDemos()}
@@ -725,13 +757,14 @@ function App() {
                 onCloseOthers={(key) => void menuCloseOthers(key)}
                 onCloseToRight={(key) => void menuCloseToRight(key)}
                 onCloseAll={() => void menuCloseAll()}
+                onNew={openUntitled}
               />
               {/* 动作簇：保存/下载、停止、运行，针对当前激活文件，固定在一端。用 border-s：
                   RTL 下该分隔自动落在朝向标签区的一侧 */}
               <div className="flex shrink-0 items-center gap-0.5 border-s border-[var(--border)] px-1.5">
               <div className="flex items-center gap-1">
-                {/* 草稿在开着本地目录时也能「保存」——存到侧边栏选中的那个目录里 */}
-                {active?.kind === 'local' || (active?.kind === 'scratch' && workspace.hasRoot) ? (
+                {/* 未命名文件在开着本地目录时也能「保存」——存到侧边栏选中的那个目录里 */}
+                {active?.kind === 'local' || (active?.kind === 'untitled' && workspace.hasRoot) ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -792,7 +825,11 @@ function App() {
                 onRun={runCode}
                 onStop={stopCode}
                 onCloseTab={closeActiveTab}
+                onNewFile={openUntitled}
                 onDirtyChange={handleDirtyChange}
+                onChange={(key, value) => {
+                  if (isUntitledKey(key)) untitled.update(key, value)
+                }}
                 onSave={handleSave}
                 onCursorStatus={setCursor}
               />

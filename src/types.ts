@@ -27,19 +27,20 @@ export type Language = 'javascript' | 'typescript'
   打开的文件用一个 key 唯一标识，它同时是 Monaco model 的 key 和侧边栏的选中态：
     builtin:../template/overrides/call.js   内置 Demo（源码打包进来的，可改但存不回去）
     local:src/lib/foo.ts                    用户本地目录里的文件，有 handle，能写回磁盘
-    scratch                                 「新建草稿」出来的空白草稿，也是首屏的默认
+    untitled:1                              未命名文件（VS Code 的 Untitled-1）：不落在任何目录里，
+                                            可以开多份，内容存在 IndexedDB 里刷新不丢；首屏默认就是一份
     imported:foo.js                         通过 <input type=file> 导入的单个文件
                                             （只有不支持目录 API 的浏览器上还有这个入口）
   只有 local 这一种有 handle —— Ctrl+S 能真正落盘的也只有它，其余退回下载。
 */
 export interface ActiveFile {
   key: string
-  kind: 'builtin' | 'local' | 'scratch' | 'imported'
+  kind: 'builtin' | 'local' | 'untitled' | 'imported'
   /** 标题栏上显示的名字 */
   name: string
   language: string
   /** 底部状态栏展示的编码。local 来自读盘时对 BOM 的推断；其余在浏览器里生成的
-      文件（内置示例 / 草稿 / 导入）按 UTF-8 报。 */
+      文件（内置示例 / 未命名 / 导入）按 UTF-8 报。 */
   encoding: FileEncoding
   handle?: FileSystemFileHandle
 }

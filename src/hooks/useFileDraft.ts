@@ -16,7 +16,7 @@ import type { Confirm } from './useConfirm'
 /*
   「起个名字」这一步的状态机，新建和改名共用。
 
-  为什么不放在 Sidebar 里：进入命名状态有三个入口 —— 侧边栏的新建按钮、草稿的「保存」
+  为什么不放在 Sidebar 里：进入命名状态有三个入口 —— 侧边栏的新建按钮、未命名文件的「保存」
   （没有 handle 可写，改为让用户给它起个名存进目标目录）、树里右键的「重命名」。
   三个入口共用同一个输入框，所以状态得放在它们的共同祖先（App）里。
 
@@ -47,7 +47,7 @@ export interface Draft {
    * 切语言时它得跟着变 —— 所以翻译留到渲染那一刻（Sidebar 的 DraftRow）。
    */
   error: Problem | null
-  /** 草稿转正：文件建好后要写进去的内容 */
+  /** 未命名转正：文件建好后要写进去的内容 */
   content?: string
 }
 
@@ -72,7 +72,7 @@ export interface FileDraft {
 }
 
 interface Callbacks {
-  /** 文件建好后打开它。savedFromScratch 为 true 时内容来自草稿，调用方要收拾旧 model */
+  /** 文件建好后打开它。savedFromScratch 为 true 时内容来自未命名文件，调用方要收拾旧 model */
   onOpenFile: (entry: FileEntry, savedFromScratch: boolean) => void
   /** 改名成功：把编辑器里的 model、脏状态、handle 从旧 key 搬到新 key */
   onRenamed: (from: Entry, to: Entry) => void
@@ -156,7 +156,7 @@ export function useFileDraft(
 
     if (value.kind !== 'file') return null
     // 新建：只让建能打开的文本类型 —— 建出一个编辑器打不开的文件毫无意义，
-    // 草稿转正时更糟：内容写进去了，却没法在界面上看见它。
+    // 未命名转正时更糟：内容写进去了，却没法在界面上看见它。
     // 改名：只在原名本来就能打开时才要求（别拦住给 .png 改名），
     // 但不许把一个文本文件改成打不开的后缀 —— 那等于把它从界面上弄丢了
     const openable = value.mode === 'create' || languageOf(value.target?.name ?? '') !== null
