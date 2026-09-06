@@ -141,7 +141,6 @@
   "confirm.renameDir.size_other": "{{files}} files, {{size}} in total. Please keep this page open while it copies.",
   "confirm.renameDir.risk": "Copied files get their modification time reset to now. If the copy fails halfway the original stays untouched, but a half-copied folder is left on disk.",
   "confirm.renameDir.ok": "Rename",
-  "sidebar.title": "Files",
   "sidebar.expand": "Show file panel",
   "sidebar.collapse": "Hide file panel",
   "sidebar.resize": "Drag to resize (double-click to reset)",

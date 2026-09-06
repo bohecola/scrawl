@@ -141,7 +141,6 @@
   "confirm.renameDir.size_other": "{{files}} Dateien, {{size}} insgesamt. Lassen Sie die Seite während des Kopierens offen.",
   "confirm.renameDir.risk": "Kopierte Dateien erhalten die aktuelle Änderungszeit. Bricht der Vorgang mittendrin ab, bleibt das Original unversehrt, es bleibt aber ein halb kopierter Ordner zurück.",
   "confirm.renameDir.ok": "Umbenennen",
-  "sidebar.title": "Dateien",
   "sidebar.expand": "Dateibereich einblenden",
   "sidebar.collapse": "Dateibereich ausblenden",
   "sidebar.resize": "Ziehen zum Skalieren (Doppelklick setzt zurück)",

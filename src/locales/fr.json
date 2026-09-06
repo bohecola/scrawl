@@ -151,7 +151,6 @@
   "confirm.renameDir.size_other": "{{files}} fichiers, {{size}} au total. Gardez la page ouverte pendant la copie.",
   "confirm.renameDir.risk": "Les fichiers copiés voient leur date de modification remise à maintenant. Si la copie échoue à mi-chemin, l’original reste intact, mais un dossier à moitié copié est laissé sur le disque.",
   "confirm.renameDir.ok": "Renommer",
-  "sidebar.title": "Fichiers",
   "sidebar.expand": "Afficher le panneau de fichiers",
   "sidebar.collapse": "Masquer le panneau de fichiers",
   "sidebar.resize": "Glisser pour redimensionner (double-clic pour réinitialiser)",

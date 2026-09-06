@@ -4,18 +4,38 @@ import { GithubMark } from './GithubMark'
 import { JotterMark } from './JotterMark'
 import { SettingsDialog } from './SettingsDialog'
 import { useI18n } from '@/i18n/context'
+import { cn } from '@/lib/utils'
 
 interface HeaderBarProps {
+  /** 侧栏收起 / 展开。开关放顶栏最左、正压在侧栏上方：它管的是整个窗口的分栏，不是侧栏里的内容 */
+  sidebarCollapsed: boolean
+  onToggleSidebar: () => void
   /** 不支持目录 API 的浏览器上才显示「导入」按钮 */
   showImport: boolean
   onImport: () => void
 }
 
-/** 顶栏：品牌、（可选的）导入、设置面板、GitHub 链接。 */
-export function HeaderBar({ showImport, onImport }: HeaderBarProps) {
+/** 顶栏：侧栏开关、品牌、（可选的）导入、设置面板、GitHub 链接。 */
+export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImport }: HeaderBarProps) {
   const { t } = useI18n()
   return (
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--panel-bg)] px-4 py-3">
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--panel-bg)] px-3 py-3">
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        title={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+        aria-label={sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')}
+        aria-expanded={!sidebarCollapsed}
+        className="text-[var(--text-muted)]"
+        onClick={onToggleSidebar}
+      >
+        <Icon
+          className={cn(
+            sidebarCollapsed ? 'icon-[lucide--panel-left-open]' : 'icon-[lucide--panel-left-close]',
+            'rtl:-scale-x-100'
+          )}
+        />
+      </Button>
       <div className="flex items-center gap-2 text-base font-semibold">
         <JotterMark className="size-5" />
         Jotter

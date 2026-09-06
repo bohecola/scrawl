@@ -35,6 +35,7 @@ import type { ModuleHost } from './lib/module-graph'
 import { startPointerDrag } from './lib/pointer-drag'
 import { shortcut, isRtl } from './lib/platform'
 import { useMediaQuery } from './hooks/useMediaQuery'
+import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
 import { messageOf, useI18n } from '@/i18n/context'
 
 // 编辑器 / Console 分栏
@@ -60,8 +61,9 @@ function App() {
   const { resolveFilePath, displayPath } = workspace
   const { t } = useI18n()
   const confirm = useConfirm()
-  // 窄屏（手机竖屏）：编辑器与 Console 上下堆叠，分栏把手隐藏，侧栏默认收起（Sidebar 自己判断）
+  // 窄屏（手机竖屏）：编辑器与 Console 上下堆叠，分栏把手隐藏，侧栏默认收起（useSidebarCollapsed 里判断）
   const narrow = useMediaQuery('(max-width: 767px)')
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
   const editorRef = useRef<EditorHandle>(null)
   const consoleRef = useRef<ConsoleHandle>(null)
@@ -702,7 +704,12 @@ function App() {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--text-primary)]">
       {/* 顶部工具栏 */}
-      <HeaderBar showImport={!workspace.supported} onImport={handleImport} />
+      <HeaderBar
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
+        showImport={!workspace.supported}
+        onImport={handleImport}
+      />
 
       {/* warn / error 的右下角浮层通知；info 类反馈显示在底部状态栏 */}
       <NoticeBar notice={notice} onClose={() => setNotice(null)} />
@@ -714,6 +721,7 @@ function App() {
           templates={templates}
           activeKey={active?.key ?? null}
           dirtyKeys={dirtyKeys}
+          collapsed={sidebarCollapsed}
           onOpenTemplate={(path) => void openTemplate(path)}
           onOpenLocalFile={(entry) => void openLocalFile(entry)}
           onSaveDemos={() => void saveDemos()}

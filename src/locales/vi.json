@@ -131,7 +131,6 @@
   "confirm.renameDir.size_other": "{{files}} tệp, tổng {{size}}. Đừng đóng trang trong khi đang sao chép.",
   "confirm.renameDir.risk": "Thời gian sửa của tệp sao chép sẽ cập nhật về hiện tại. Nếu thất bại giữa chừng, bản gốc vẫn nguyên vẹn nhưng sẽ còn thư mục mới sao chép dở trên đĩa.",
   "confirm.renameDir.ok": "Đổi tên",
-  "sidebar.title": "Tệp",
   "sidebar.expand": "Mở rộng danh sách tệp",
   "sidebar.collapse": "Thu gọn danh sách tệp",
   "sidebar.resize": "Kéo để chỉnh rộng (nhấp đúp để đặt lại)",

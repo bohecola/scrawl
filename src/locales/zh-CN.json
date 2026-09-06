@@ -131,7 +131,6 @@
   "confirm.renameDir.size_other": "目录内共 {{files}} 个文件、{{size}}，复制期间请勿关闭页面。",
   "confirm.renameDir.risk": "复制出的文件修改时间会更新为当前时间；若中途失败，原目录保持不变，但磁盘上会残留一个未复制完成的新目录。",
   "confirm.renameDir.ok": "改名",
-  "sidebar.title": "文件",
   "sidebar.expand": "展开文件栏",
   "sidebar.collapse": "收起文件栏",
   "sidebar.resize": "拖动调整宽度（双击复位）",

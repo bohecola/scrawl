@@ -151,7 +151,6 @@
   "confirm.renameDir.size_other": "{{files}} file, {{size}} in totale. Tieni aperta la pagina durante la copia.",
   "confirm.renameDir.risk": "I file copiati ottengono la data di modifica corrente. Se la copia fallisce a metà, l'originale resta intatto ma resta una cartella copiata a metà sul disco.",
   "confirm.renameDir.ok": "Rinomina",
-  "sidebar.title": "File",
   "sidebar.expand": "Mostra il pannello file",
   "sidebar.collapse": "Nascondi il pannello file",
   "sidebar.resize": "Trascina per ridimensionare (doppio clic per resettare)",

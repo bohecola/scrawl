@@ -131,7 +131,6 @@
   "confirm.renameDir.size_other": "ファイル {{files}} 個、計 {{size}}。コピー中はページを閉じないでください。",
   "confirm.renameDir.risk": "コピーされたファイルの更新日時は現在時刻になります。途中で失敗しても元はそのままですが、半分だけコピーした新しいフォルダーがディスクに残ります。",
   "confirm.renameDir.ok": "名前を変更",
-  "sidebar.title": "ファイル",
   "sidebar.expand": "ファイル一覧を開く",
   "sidebar.collapse": "ファイル一覧をたたむ",
   "sidebar.resize": "ドラッグで幅を調整（ダブルクリックで初期化）",

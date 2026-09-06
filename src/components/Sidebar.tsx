@@ -21,7 +21,6 @@ import {
 import { cn } from '@/lib/utils'
 import { startPointerDrag } from '@/lib/pointer-drag'
 import { isMac } from '@/lib/platform'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { MAX_ENTRIES_PER_DIR, languageOf, type Entry, type FileEntry } from '@/lib/fs-access'
 import { translate, useI18n, type T } from '@/i18n/context'
 import { rootAsEntry, type Workspace, type WorkspaceRoot } from '@/hooks/useWorkspace'
@@ -35,7 +34,6 @@ import type { Draft, FileDraft } from '@/hooks/useFileDraft'
 */
 
 const WIDTH_KEY = 'jotter:sidebarWidth'
-const COLLAPSED_KEY = 'jotter:sidebarCollapsed'
 /**
  * Demo 那一段的展开状态。
  *
@@ -723,6 +721,8 @@ export interface SidebarProps {
   templates: readonly string[]
   activeKey: string | null
   dirtyKeys: Set<string>
+  /** 收起时整个面板不渲染；开关在顶栏上（HeaderBar），状态由 hooks/useSidebarCollapsed 管 */
+  collapsed: boolean
   onOpenTemplate: (path: string) => void
   onOpenLocalFile: (entry: FileEntry) => void
   /** 「把全部 Demo 存到本地文件夹」。选文件夹、落盘、接管成根都在 App 那边 */
@@ -754,6 +754,7 @@ export default function Sidebar({
   templates,
   activeKey,
   dirtyKeys,
+  collapsed,
   onOpenTemplate,
   onOpenLocalFile,
   onSaveDemos,
@@ -767,22 +768,6 @@ export default function Sidebar({
 }: SidebarProps) {
   const { t } = useI18n()
   const [width, setWidth] = useState(readWidth)
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      const saved = localStorage.getItem(COLLAPSED_KEY)
-      if (saved !== null) return saved === '1'
-    } catch {
-      /* 读不到就按默认来 */
-    }
-    // 没存过：手机竖屏上侧栏会占掉大半个屏幕，默认收起
-    return typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 767px)').matches
-  })
-  // 中途变窄（旋转平板、缩小窗口）也收起；变宽不自动展开，由用户决定。
-  // 窄屏期间的收起状态不落盘，回到桌面尺寸时仍是用户原来的选择
-  const narrow = useMediaQuery('(max-width: 767px)')
-  useEffect(() => {
-    if (narrow) setCollapsed(true)
-  }, [narrow])
   // Demo 这一段默认收起：它是「要用的时候才翻开」的东西，
   // 首屏摊开一堆别人的文件名，会把上面真正在用的本地目录挤下去
   const [templatesOpen, setTemplatesOpen] = useState(() => {
@@ -933,13 +918,12 @@ export default function Sidebar({
   useEffect(() => {
     try {
       localStorage.setItem(WIDTH_KEY, String(width))
-      if (!narrow) localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0')
       localStorage.setItem(TEMPLATES_KEY, templatesOpen ? '1' : '0')
       localStorage.removeItem(LEGACY_TEMPLATES_KEY)
     } catch {
       // 记不住就记不住
     }
-  }, [width, collapsed, templatesOpen, narrow])
+  }, [width, templatesOpen])
 
   // 转圈至少持续 REFRESH_SPIN_MS，否则「点了刷新」这件事用户根本看不见。
   // 期间再点直接忽略，免得转圈被下一次点击打断又重来。
@@ -985,22 +969,8 @@ export default function Sidebar({
     })
   }, [])
 
-  if (collapsed) {
-    return (
-      <div className="flex shrink-0 flex-col items-center border-e border-[var(--border)] bg-[var(--panel-bg)] px-1.5 py-2">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          title={t('sidebar.expand')}
-          aria-label={t('sidebar.expand')}
-          className="text-[var(--text-muted)]"
-          onClick={() => setCollapsed(false)}
-        >
-          <Icon className="icon-[lucide--panel-left-open] rtl:-scale-x-100" />
-        </Button>
-      </div>
-    )
-  }
+  // 收起就整个不渲染，展开的开关在顶栏上
+  if (collapsed) return null
 
   const groups = groupTemplates(templates, t)
   // 收起后 Demo 里的未保存改动就看不见了，在标题上留一个点顶上
@@ -1018,23 +988,6 @@ export default function Sidebar({
       // hover 时的高亮条往外长而不是往里压，才不会盖住选中行的描边
       className="relative flex shrink-0 flex-col bg-[var(--panel-bg)]"
     >
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="text-sm text-[var(--text-muted)]">{t('sidebar.title')}</span>
-        <div className="flex items-center">
-          {/* 「新建文件」不在这里：未命名文件的家是标签栏（末尾的「+」/ Alt+N），侧栏只列磁盘上和内置的东西 */}
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            title={t('sidebar.collapse')}
-            aria-label={t('sidebar.collapse')}
-            className="text-[var(--text-muted)]"
-            onClick={() => setCollapsed(true)}
-          >
-            <Icon className="icon-[lucide--panel-left-close] rtl:-scale-x-100" />
-          </Button>
-        </div>
-      </div>
-
       {/* 竖向悬浮滚动条：相对定位一个外层，内层才是真正滚动区（原生隐藏），
           overlay 贴右、悬停浮现、不占宽度 */}
       <div className="group relative min-h-0 flex-1">

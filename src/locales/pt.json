@@ -151,7 +151,6 @@
   "confirm.renameDir.size_other": "{{files}} arquivos, {{size}} no total. Mantenha a página aberta durante a cópia.",
   "confirm.renameDir.risk": "Os arquivos copiados ganham a data de modificação atual. Se falhar no meio, a original fica intacta, mas uma pasta copiada pela metade fica no disco.",
   "confirm.renameDir.ok": "Renomear",
-  "sidebar.title": "Arquivos",
   "sidebar.expand": "Expandir o painel de arquivos",
   "sidebar.collapse": "Recolher o painel de arquivos",
   "sidebar.resize": "Arraste para redimensionar (clique duplo redefine)",
