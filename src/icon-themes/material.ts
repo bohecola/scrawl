@@ -47,7 +47,8 @@ const folderNames: Record<string, string> = {
   template: 'folder-template', templates: 'folder-template',
   theme: 'folder-theme', themes: 'folder-theme',
   json: 'folder-json', packages: 'folder-packages', workers: 'folder-tasks',
-  '.claude': 'folder-other',
+  '.claude': 'folder-claude',
+  other: 'folder-other',
 }
 
 const folderNamesExpanded = Object.fromEntries(
@@ -60,8 +61,11 @@ export const material: IconThemeMeta = {
   render: 'svg',
   rules: {
     file: 'document',
-    folder: 'folder-other',
-    folderExpanded: 'folder-other-open',
+    // 默认目录就是上游的 folder / folder-open：单色的 blue grey，同 VS Code 里那个灰。
+    // 别拿 folder-other 当默认 —— 那是「名字就叫 other 的目录」专用的那张，橙红色。
+    // 这两个图标包里没有，由 scripts/build-icon-themes.mjs 从 folder-base 推出来
+    folder: 'folder',
+    folderExpanded: 'folder-open',
     fileNames: {
       'package.json': 'nodejs', '.nvmrc': 'nodejs', '.node-version': 'nodejs',
       'package-lock.json': 'npm', '.npmrc': 'npm',
