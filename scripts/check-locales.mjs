@@ -14,9 +14,18 @@
   6. 空字符串
   7. JSON 合法且顶层是扁平对象（值全是字符串）
   8. 键顺序和 en.json 不一致 → 警告（不退出非零）
+
+  最后再扫一遍 src/ 下的调用点（第 9 项）：
+  9. t('键', { ... }) 传的参数要和 en.json 里那条文案的 {{占位符}} 对得上
+
+  第 9 项补的是前 8 项和类型系统都够不着的那个洞（见 i18n/i18next.d.ts 的注释）：
+  键名写错有 CustomTypeOptions 兜着，各语言之间不一致有第 3 项兜着，
+  但「键还在、11 种语言也都一致，只是调用方传的参数换了一个名字」谁都看不见。
+  真出过一次：file.untitled 从 Untitled.{{ext}} 被改成标签用的 Untitled-{{n}}，
+  useFileDraft 那个调用点没跟着改，界面上就原样显示出了「未命名-{{n}}」。
 */
 import { readFileSync, readdirSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { join, basename, extname } from 'node:path'
 
 const ROOT = new URL('..', import.meta.url).pathname
 const LOCALES = join(ROOT, 'src', 'locales')
@@ -163,6 +172,114 @@ for (const file of readdirSync(LOCALES)) {
     console.log(`  ⚠ 键顺序与 en.json 不一致（建议修正，方便 diff）`)
   }
 }
+
+// ---- 9. 调用点参数 ----
+
+/* i18next 自己认的参数名，任何键都可以传，不算「多余」 */
+const RESERVED = new Set([
+  'count', 'context', 'lng', 'lngs', 'ns', 'defaultValue', 'replace',
+  'returnObjects', 'interpolation', 'formatParams', 'ordinal',
+])
+
+/*
+  从 `{ a, b: expr, 'c': x }` 里取出顶层属性名。
+  只认字面量对象：带 ... 展开、或者压根不是 `{` 开头（参数是个变量）的调用一律跳过 ——
+  这个检查宁可漏报也不能误报，误报会让 pnpm lint 变成需要绕开的东西。
+  返回 null 表示「这处看不懂，跳过」。
+*/
+function objectKeys(src) {
+  const keys = []
+  let depth = 0
+  let start = 1 // 跳过开头的 {
+  let quote = null
+  const segments = []
+  for (let i = 1; i < src.length; i++) {
+    const c = src[i]
+    if (quote) {
+      if (c === '\\') i++
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue }
+    if (c === '{' || c === '[' || c === '(') { depth++; continue }
+    if (c === '}' && depth === 0) { segments.push(src.slice(start, i)); break }
+    if (c === '}' || c === ']' || c === ')') { depth--; continue }
+    if (c === ',' && depth === 0) { segments.push(src.slice(start, i)); start = i + 1 }
+  }
+  for (const seg of segments) {
+    const text = seg.trim()
+    if (text === '') continue
+    if (text.startsWith('...')) return null // 展开进来的参数，看不出有哪些
+    // `名字:`、`'名字':` 或者简写 `名字`
+    const m = /^(?:'([^']+)'|"([^"]+)"|\[[^\]]+\]|([A-Za-z_$][\w$]*))\s*(:|$)/.exec(text)
+    if (!m) return null
+    if (m[3] === undefined && m[1] === undefined && m[2] === undefined) return null // 计算属性名
+    keys.push(m[1] ?? m[2] ?? m[3])
+  }
+  return keys
+}
+
+/** 从 `t('键'` 那个位置起，把紧跟其后的字面量对象整段切出来；没有第二个参数返回 undefined */
+function secondArg(src, from) {
+  let i = from
+  while (i < src.length && /\s/.test(src[i])) i++
+  if (src[i] !== ',') return undefined // 只有键，没参数
+  i++
+  while (i < src.length && /\s/.test(src[i])) i++
+  if (src[i] !== '{') return null // 参数不是字面量对象（变量 / 展开），跳过
+  let depth = 0
+  let quote = null
+  for (let j = i; j < src.length; j++) {
+    const c = src[j]
+    if (quote) {
+      if (c === '\\') j++
+      else if (c === quote) quote = null
+      continue
+    }
+    if (c === '"' || c === "'" || c === '`') { quote = c; continue }
+    if (c === '{') depth++
+    else if (c === '}' && --depth === 0) return src.slice(i, j + 1)
+  }
+  return null // 括号没配平，交给 tsc 去骂
+}
+
+const sources = []
+;(function walk(dir) {
+  for (const name of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, name.name)
+    if (name.isDirectory()) walk(full)
+    else if (['.ts', '.tsx'].includes(extname(name.name))) sources.push(full)
+  }
+})(join(ROOT, 'src'))
+
+console.log('\n调用点参数（src/**/*.ts(x)）')
+let checked = 0
+let skipped = 0
+for (const file of sources) {
+  const src = readFileSync(file, 'utf8')
+  const rel = file.slice(ROOT.length)
+  // \bt( 同时覆盖 t('…') 和 i18n.t('…')；translate( / at( 这类不会命中（t 后面不是括号）
+  for (const m of src.matchAll(/\bt\(\s*'([^']*)'/g)) {
+    const key = m[1]
+    const expected = key in en ? interpVars(en[key]) : enVarsByBase.get(stripSuffix(key))
+    if (!expected) {
+      // 键名本身错了。tsc 一般先一步报出来，但动态拼出来的键它管不着
+      fail(rel, `${rel}: t('${key}') 的键不在 en.json 里`)
+      continue
+    }
+    const arg = secondArg(src, m.index + m[0].length)
+    const passed = arg === undefined ? [] : arg === null ? null : objectKeys(arg)
+    if (passed === null) { skipped++; continue }
+    checked++
+    const missingVar = [...expected].filter((v) => !passed.includes(v))
+    const extraVar = passed.filter((v) => !expected.has(v) && !RESERVED.has(v))
+    if (missingVar.length > 0 || extraVar.length > 0) {
+      fail(rel, `${rel}: t('${key}') 参数对不上文案 ${JSON.stringify(en[key] ?? '(按基键比对)')}` +
+        `（缺 ${missingVar.join(', ') || '—'}，多 ${extraVar.join(', ') || '—'}）`)
+    }
+  }
+}
+console.log(`  · 查了 ${checked} 处，跳过 ${skipped} 处（参数不是字面量对象）`)
 
 if (failed) {
   console.error('\ni18n:check 未通过')
