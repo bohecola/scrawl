@@ -229,8 +229,15 @@ function App() {
     [setNotice, t, openOrActivate]
   )
 
+  /**
+   * 打开一个本地文件。
+   *
+   * preserveFocus：打开后不把焦点抢到编辑器里。侧边栏单击走的就是这条 —— 焦点留在
+   * 那一行上，选中态才是「活的」，回车 / F2 也才有机会改名（同 VS Code 的资源管理器）。
+   * 其它入口（保存后转正、启动恢复）照旧直接聚焦编辑器：那些场景下用户就是要开始打字。
+   */
   const openLocalFile = useCallback(
-    async (entry: FileEntry) => {
+    async (entry: FileEntry, { preserveFocus = false }: { preserveFocus?: boolean } = {}) => {
       const language = languageOf(entry.name)
       if (!language) {
         setNotice({ tone: 'warn', text: t('notice.notTextFile', { name: entry.name }) })
@@ -262,7 +269,7 @@ function App() {
           handle: entry.handle,
         })
         consoleRef.current?.clear()
-        editorRef.current?.focus()
+        if (!preserveFocus) editorRef.current?.focus()
       } catch (err) {
         setNotice({ tone: 'error', text: messageOf(err, t) })
       }
@@ -741,7 +748,8 @@ function App() {
           dirtyKeys={dirtyKeys}
           collapsed={sidebarCollapsed}
           onOpenTemplate={(path) => void openTemplate(path)}
-          onOpenLocalFile={(entry) => void openLocalFile(entry)}
+          onOpenLocalFile={(entry) => void openLocalFile(entry, { preserveFocus: true })}
+          onFocusEditor={() => editorRef.current?.focus()}
           onSaveDemos={() => void saveDemos()}
           onCancelSave={() => void cancelSave()}
           cancelling={cancelling}

@@ -23,7 +23,7 @@ import { startPointerDrag } from '@/lib/pointer-drag'
 import { isMac } from '@/lib/platform'
 import { MAX_ENTRIES_PER_DIR, languageOf, type Entry, type FileEntry } from '@/lib/fs-access'
 import { translate, useI18n, type T } from '@/i18n/context'
-import { rootAsEntry, type Workspace, type WorkspaceRoot } from '@/hooks/useWorkspace'
+import { parentOf, rootAsEntry, type Workspace, type WorkspaceRoot } from '@/hooks/useWorkspace'
 import type { Draft, FileDraft } from '@/hooks/useFileDraft'
 
 /*
@@ -163,7 +163,8 @@ interface RowProps extends React.ComponentProps<'button'> {
   depth: number
   label: string
   /** 是否命中全局选中（同 VS Code：同一时刻侧栏只有一行是选中态）。
-      命中则整行无圆角平铺 --list-active 底色 + 一圈细的焦点描边。 */
+      命中则整行无圆角平铺底色；底色分两档，看侧栏这会儿有没有焦点，
+      具体见下面 className 里那段注释。 */
   selected?: boolean
   /** 与 selected 同义，历史遗留名：当前打开文件也当选中处理。调用来统一传 selected */
   active?: boolean
@@ -173,6 +174,8 @@ interface RowProps extends React.ComponentProps<'button'> {
   icon: React.ReactNode
   /** 箭头列的内容（目录行的展开 / 收起箭头）；文件行不传，留空占位 */
   twistie?: React.ReactNode
+  /** 这一行的打开 key（local:… / builtin:…）。「跟着当前文件定位」要靠它在 DOM 里认人 */
+  'data-row-key'?: string
 }
 
 /** 缩进走 padding 而不是嵌套 margin，hover 背景才能铺满整行。 */
@@ -187,6 +190,7 @@ function Row({
   twistie,
   className,
   style,
+  onPointerDown,
   ...rest
 }: RowProps) {
   const { t } = useI18n()
@@ -200,15 +204,32 @@ function Row({
       // style 要和外面传进来的合并：ContextMenuTrigger asChild 会往下塞一个
       // style（WebkitTouchCallout），直接 {...rest} 会把这里的缩进整个顶掉
       style={{ paddingInlineStart: padOf(depth), ...style }}
+      // 点一下必须真的把焦点落到这一行上：macOS 的 Safari / Firefox 点 <button> 不给焦点，
+      // 而「选中态分焦点内外两档」和回车改名都以这一行拿到焦点为前提。
+      // 先把外面传进来的那个跑完（ContextMenuTrigger 的长按开菜单挂在这上面）
+      onPointerDown={(e) => {
+        onPointerDown?.(e)
+        if (!e.defaultPrevented) e.currentTarget.focus()
+      }}
       className={cn(
         // 不加圆角：VS Code 的选中 / hover 是贴边的整行矩形
         // 预留 1px 透明边框：选中时改成主色细框，四周都画得出来、且不造成布局跳动
         'relative flex w-full items-center gap-1.5 border border-transparent py-1 pe-2 text-start text-[13px] text-[var(--text-body)]',
+        // 分组标题是吸顶的，滚动定位时要给它让出高度（h-9），否则「滚进视野」的行
+        // 正好停在标题底下看不见。scroll-margin 就是 scrollIntoView 认的那个余量
+        'scroll-mt-9',
+        // 焦点指示只用那圈 1px 细框，浏览器自带的蓝色 outline 一律不要：
+        // 上面 onPointerDown 里的 focus() 在 Chrome 眼里是「脚本聚焦」，只要上一次交互是键盘
+        // （在编辑器里打过字），它就会当成 :focus-visible 把默认焦点环画出来 —— 那圈亮蓝
+        // 既盖住配色又和整套视觉不搭。改用 border 承担，同 ui/button 的写法
+        'outline-none focus-visible:border-[var(--list-active-ring)]',
         // hover 只加在非选中行上，避免悬停时把选中底色盖成普通 hover
         !isSelected && 'hover:bg-[var(--panel-hover)]',
-        // 选中行：整行平铺半透明底色 + 四周 1px 细框（同 VS Code 的焦点描边）
+        // 选中行有两档，跟 VS Code 一样：侧栏握着焦点时铺主色底 + 四周 1px 细框；
+        // 焦点走了（比如落到编辑器里）就退成中性灰、去掉描边 —— 「选的还是这一行，
+        // 但键盘现在不在这儿」。data-panel-focus 由最外层面板挂（见 group/panel）
         isSelected &&
-          'bg-[var(--list-active)] border-[var(--list-active-ring)]',
+          'bg-[var(--list-inactive)] group-data-[panel-focus]/panel:border-[var(--list-active-ring)] group-data-[panel-focus]/panel:bg-[var(--list-active)]',
         dimmed && !isSelected && 'text-[var(--text-faint)]',
         className
       )}
@@ -298,6 +319,22 @@ function EntryMenu({
 }
 
 /**
+ * 聚焦时默认选中到哪 —— 后缀之前那一段（同 VS Code 的重命名）。
+ *
+ * 之前是整条全选，两个流程都别扭：改名 sort.js 想叫 quick，得把 .js 重敲一遍；
+ * 新建时预填的 .js 也白填了，一打字连后缀一起没。选到后缀之前，两边就都是
+ * 「直接敲名字，后缀自己留着」。
+ *
+ * 目录没有后缀，整条全选；.gitignore 这种通篇就是后缀的（点在第 0 位）也全选 ——
+ * 对它们来说「后缀之前」是空的，选了等于没选。
+ */
+function stemEnd(name: string, kind: Draft['kind']): number {
+  if (kind === 'directory') return name.length
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? dot : name.length
+}
+
+/**
  * 行内命名输入。新建时插在子列表第一行，重命名时就地替换掉原来那一行。
  * 样式刻意照抄 Row：它应该看着就是树里的一行，
  * 而不是一个凭空插进来的表单控件（这也是没用 shadcn 的 Input 的原因，
@@ -333,7 +370,8 @@ function DraftRow({ depth, draft, value }: { depth: number; draft: FileDraft; va
                 : t('sidebar.newDirAria')
           }
           onChange={(e) => draft.setName(e.target.value)}
-          onFocus={(e) => e.currentTarget.select()}
+          // autoFocus 挂载时触发一次，选中范围就在那一刻定下（失焦即取消，没有第二次）
+          onFocus={(e) => e.currentTarget.setSelectionRange(0, stemEnd(value.name, value.kind))}
           onKeyDown={(e) => {
             if (e.key === 'Enter') draft.submit()
             else if (e.key === 'Escape') draft.cancel()
@@ -418,8 +456,12 @@ function RootRow({
       className={cn(
         // 预留 1px 透明边框：选中时改成主色细框，四周都画得出来、不造成布局跳动
         'group relative flex items-center border border-transparent pe-1',
+        // 键盘焦点落在行内那个 button 上，框却画在这一层，所以用 has- 往下探。
+        // 只认 treeitem，不认行尾的 ⋯（它自己有焦点环）
+        'has-[[role=treeitem]:focus-visible]:border-[var(--list-active-ring)]',
+        // 两档选中态，同 Row 里那段说明
         selected
-          ? 'bg-[var(--list-active)] border-[var(--list-active-ring)]'
+          ? 'bg-[var(--list-inactive)] group-data-[panel-focus]/panel:border-[var(--list-active-ring)] group-data-[panel-focus]/panel:bg-[var(--list-active)]'
           : 'hover:bg-[var(--panel-hover)]'
       )}
     >
@@ -435,6 +477,8 @@ function RootRow({
               ? t('sidebar.rootLocked', { name: root.name })
               : t('sidebar.rootHint', { name: root.name })
         }
+        // 同 Row：点击要把焦点真的落在这一行上（见那边的说明）
+        onPointerDown={(e) => e.currentTarget.focus()}
         // 没授权时点击就是去要权限：requestPermission 只能在用户手势里发起，
         // 而这一行本身就是那个手势最自然的落点
         onClick={() => {
@@ -453,7 +497,7 @@ function RootRow({
           setMenuOpen(true)
         }}
         style={{ paddingInlineStart: padOf(0) }}
-        className="relative flex min-w-0 flex-1 items-center gap-1.5 py-1 pe-1 text-start text-[13px]"
+        className="relative flex min-w-0 flex-1 items-center gap-1.5 py-1 pe-1 text-start text-[13px] outline-none"
       >
         <span className={TWISTIE_SLOT}>
           {missing ? (
@@ -565,8 +609,8 @@ interface TreeProps {
   onRenameEntry: (entry: Entry) => void
   onDeleteEntry: (entry: Entry) => void
   onCopyPath: (path: string) => void
-  /** 某一行被点击/选中时回调，用于记住「最近操作的是谁」供重命名快捷键用 */
-  onSelectEntry: (entry: Entry) => void
+  /** 双击文件：把焦点交给编辑器（单击只打开，焦点留在侧栏，同 VS Code） */
+  onFocusEditor: () => void
 }
 
 /** 递归渲染一层目录。没有缓存到 childrenByPath 的层不渲染（还没展开过）。 */
@@ -583,7 +627,7 @@ function Tree({
   onRenameEntry,
   onDeleteEntry,
   onCopyPath,
-  onSelectEntry,
+  onFocusEditor,
 }: TreeProps) {
   const { t } = useI18n()
   const listing = workspace.childrenByPath.get(path)
@@ -635,7 +679,6 @@ function Tree({
                 workspace.select(entry.path)
                 void workspace.toggle(entry)
                 onSelect(dirSelId(entry.path))
-                onSelectEntry(entry)
               }}
             />
           </EntryMenu>
@@ -653,7 +696,7 @@ function Tree({
               onRenameEntry={onRenameEntry}
               onDeleteEntry={onDeleteEntry}
               onCopyPath={onCopyPath}
-              onSelectEntry={onSelectEntry}
+              onFocusEditor={onFocusEditor}
             />
           )}
         </li>
@@ -672,17 +715,20 @@ function Tree({
         >
           <Row
             depth={depth}
+            data-row-key={key}
             label={entry.name}
             selected={selectedId === key}
             dirty={dirtyKeys.has(key)}
             // 认不出后缀的文件点开会被拒（可能是二进制），先在视觉上说明它不一样
             dimmed={language === null}
             icon={<FileIcon kind="file" name={entry.name} language={language} />}
+            // 单击只是打开，焦点留在这一行上（同 VS Code），回车 / F2 才有得改名；
+            // 想马上写代码就双击，那时才把焦点交给编辑器
             onClick={() => {
               onOpenFile(entry)
               onSelect(key)
-              onSelectEntry(entry)
             }}
+            onDoubleClick={onFocusEditor}
           />
         </EntryMenu>
       </li>
@@ -725,6 +771,9 @@ export interface SidebarProps {
   collapsed: boolean
   onOpenTemplate: (path: string) => void
   onOpenLocalFile: (entry: FileEntry) => void
+  /** 双击文件行时把焦点交给编辑器。单击只打开、焦点留在侧栏（同 VS Code），
+      否则选中行刚亮起来焦点就跑了，回车 / F2 改名永远轮不到 */
+  onFocusEditor: () => void
   /** 「把全部 Demo 存到本地文件夹」。选文件夹、落盘、接管成根都在 App 那边 */
   onSaveDemos: () => void
   /** 写入进行中时点「取消」：停止写入并清理已写残留 */
@@ -757,6 +806,7 @@ export default function Sidebar({
   collapsed,
   onOpenTemplate,
   onOpenLocalFile,
+  onFocusEditor,
   onSaveDemos,
   onCancelSave,
   cancelling,
@@ -869,10 +919,10 @@ export default function Sidebar({
     })
   }
 
-  // 最近一次在侧边栏点击的条目（目录或文件）。重命名快捷键（F2 / Mac 回车）作用于它。
-  const selectedEntryRef = useRef<Entry | null>(null)
   // 侧栏根元素：重命名快捷键只在焦点落在侧栏里时响应
   const panelRef = useRef<HTMLDivElement | null>(null)
+  // 焦点在不在这条侧栏里。选中行据此分两档显示（同 VS Code：焦点走了，选中行退成中性灰）
+  const [panelFocused, setPanelFocused] = useState(false)
 
   // 全局选中行 id（同 VS Code：同一时刻整条侧栏只有一行高亮）。
   // 文件 / 模板行的 id 就是它们的打开 key（local:… / builtin:…），目录 / 根是带前缀的
@@ -883,6 +933,89 @@ export default function Sidebar({
   useEffect(() => {
     if (activeKey) setSelectedId(activeKey)
   }, [activeKey])
+
+  /**
+   * 把某个 key 对应的那一行滚进视野。
+   *
+   * 展开是异步的（每一层都要读盘），调用的这一刻那一行多半还没挂到 DOM 上，
+   * 所以按帧重试；一直等不到就放弃，不无限转下去。
+   *
+   * 按 key 找行，而不是找 aria-selected 的那一行：选中态是另一个 effect 里
+   * setSelectedId 出来的，它引发的重渲染和这里的 rAF 谁先谁后没有保证 ——
+   * 实测 rAF 会赢，于是「选中行」还是上一个文件，滚了个寂寞。
+   */
+  const scrollRowIntoView = useCallback((key: string) => {
+    let tries = 0
+    const tick = () => {
+      const row = panelRef.current?.querySelector(`[data-row-key="${CSS.escape(key)}"]`)
+      if (row) {
+        row.scrollIntoView({ block: 'nearest' })
+        return
+      }
+      if (++tries < 30) requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  }, [])
+
+  /**
+   * 上一次定位到的 key。expandDir 这些依赖每次渲染都是新的，effect 会被反复叫醒，
+   * 靠它把「同一个 key 的重复定位」挡掉。
+   * 每一种 key 都要记（含未命名和 null）—— 只记本地文件的话，从本地文件切到未命名
+   * 再切回来，这里还停在那个本地文件上，回来这一次就被当成重复给挡了。
+   */
+  const revealedRef = useRef<string | null>(null)
+  // 先解构出来再用：写成 workspace.expandDir(...) 的话，exhaustive-deps 会连整个
+  // workspace 一起要（方法调用带 this），而它每次渲染都是新对象
+  const { expandDir } = workspace
+  /**
+   * 跟着当前文件「定位」到左侧树里（同 VS Code 的 explorer.autoReveal）：
+   * 把它的各级父目录逐层展开，再把那一行滚进视野。
+   *
+   * 从标签页切文件、关掉一个标签落到下一个、启动恢复上次打开的文件，都会走到这里 ——
+   * 这些入口都不经过左侧树，左侧却不该还停在一堆折叠的目录上。
+   * 各层并行展开：expandDir 的 handle 是从根现走一遍拿的，不依赖上一层已经读完；
+   * 两个 setState 也都是函数式更新，并发合并没问题。
+   */
+  useEffect(() => {
+    // 收起时整段跳过：滚也没地方滚。也不记进 revealedRef，展开侧栏后补上这一次定位
+    if (collapsed) return
+    if (revealedRef.current === activeKey) return
+    revealedRef.current = activeKey
+    if (!activeKey) return
+    if (activeKey.startsWith('builtin:')) {
+      // Demo 那一段默认是收起的，同样要先摊开才谈得上定位
+      setTemplatesOpen(true)
+      scrollRowIntoView(activeKey)
+      return
+    }
+    // 未命名文件不在树里，没有可定位的行
+    if (!activeKey.startsWith('local:')) return
+    // 各级父目录，从根往下：root、root/a、root/a/b
+    const chain: string[] = []
+    for (let dir = parentOf(activeKey.slice('local:'.length)); dir; dir = parentOf(dir)) {
+      chain.unshift(dir)
+    }
+    void Promise.all(chain.map((dir) => expandDir(dir))).then(() => scrollRowIntoView(activeKey))
+  }, [activeKey, collapsed, expandDir, scrollRowIntoView])
+
+  /**
+   * 当前选中行对应的条目 —— 改名快捷键的作用对象。
+   *
+   * 从 selectedId 现算，而不是在点击时另存一份 ref：存 ref 的话，点过一个本地文件、
+   * 再去点 Demo 或根目录，ref 还指着那个文件，回车就改到了一个屏幕上根本没高亮的东西上。
+   * 顺带也省掉了「它是不是已经被删了」的单独校验：树里查不到就返回 null。
+   * root: / builtin: 两种前缀直接不参与 —— 根目录和内置 Demo 都改不了名。
+   */
+  const entryOfSelection = useCallback((): Entry | null => {
+    const path = selectedId?.startsWith('local:')
+      ? selectedId.slice('local:'.length)
+      : selectedId?.startsWith('dir:')
+        ? selectedId.slice('dir:'.length)
+        : null
+    if (!path) return null
+    const listing = workspace.childrenByPath.get(parentOf(path))
+    return listing?.entries.find((entry) => entry.path === path) ?? null
+  }, [selectedId, workspace.childrenByPath])
 
   // macOS 上「回车」进入重命名，其它平台回车另有他用，F2 全平台通用（isMac 见 lib/platform）
 
@@ -895,25 +1028,17 @@ export default function Sidebar({
       if (!el || !panelRef.current?.contains(el)) return
       // 输入框聚焦时不响应：重命名框里回车=保存、Escape=取消
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return
-      const entry = selectedEntryRef.current
+      const entry = entryOfSelection()
       if (!entry) return
-      // 条目可能已经被删掉 / 所在根已移除：树里找不到就不再对它改名
-      const root = workspace.rootOf(entry.path)
-      const parentPath = entry.path.slice(0, entry.path.lastIndexOf('/'))
-      const listing = workspace.childrenByPath.get(parentPath)
-      const stillThere =
-        root !== null && (listing ? listing.entries.some((x) => x.path === entry.path) : entry.path === root.id)
-      if (!stillThere) {
-        selectedEntryRef.current = null
-        return
-      }
+      // 必须挡住默认动作：选中行本身是个 button，回车会顺手再「点」它一次
+      // （文件被重新打开、目录被收起），改名框刚插进来就被抽掉了脚下的行
       e.preventDefault()
       onRenameEntry(entry)
     }
     // 用捕获阶段：树里的行是 button，某些组件会在冒泡阶段 stopPropagation，捕获阶段最稳
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [onRenameEntry, workspace])
+  }, [onRenameEntry, entryOfSelection])
 
   useEffect(() => {
     try {
@@ -984,9 +1109,21 @@ export default function Sidebar({
     <div
       ref={panelRef}
       style={{ width }}
+      // 焦点进出这条侧栏都会冒到这里（React 的 onFocus / onBlur 底层就是 focusin / focusout）
+      onFocus={() => setPanelFocused(true)}
+      onBlur={(e) => {
+        const next = e.relatedTarget as HTMLElement | null
+        // 行与行之间移动焦点不算离开；被右键菜单 / 下拉菜单接走也不算 ——
+        // Radix 把菜单渲染到 body 上，但那一刻用户显然还在操作这条侧栏
+        if (next && (panelRef.current?.contains(next) || next.closest('[role=menu]'))) return
+        setPanelFocused(false)
+      }}
+      // group/panel + data-panel-focus：选中行的两档底色靠它挑（见 Row 里的 className），
+      // 省得把这个布尔值一层层透传进递归的 Tree
+      data-panel-focus={panelFocused ? '' : undefined}
       // 不裁剪横向溢出：右缘的拖拽把手要跨在面板边界上（一半在面板外），
       // hover 时的高亮条往外长而不是往里压，才不会盖住选中行的描边
-      className="relative flex shrink-0 flex-col bg-[var(--panel-bg)]"
+      className="group/panel relative flex shrink-0 flex-col bg-[var(--panel-bg)]"
     >
       {/* 竖向悬浮滚动条：相对定位一个外层，内层才是真正滚动区（原生隐藏），
           overlay 贴右、悬停浮现、不占宽度 */}
@@ -1104,9 +1241,7 @@ export default function Sidebar({
                     onRenameEntry={onRenameEntry}
                     onDeleteEntry={onDeleteEntry}
                     onCopyPath={onCopyPath}
-                    onSelectEntry={(entry) => {
-                      selectedEntryRef.current = entry
-                    }}
+                    onFocusEditor={onFocusEditor}
                   />
                 )}
               </div>
@@ -1238,6 +1373,7 @@ export default function Sidebar({
                     <li key={item.path}>
                       <Row
                         depth={1}
+                        data-row-key={key}
                         label={item.label}
                         selected={selectedId === key}
                         dirty={dirtyKeys.has(key)}
@@ -1248,6 +1384,7 @@ export default function Sidebar({
                           onOpenTemplate(item.path)
                           setSelectedId(key)
                         }}
+                        onDoubleClick={onFocusEditor}
                       />
                     </li>
                   )

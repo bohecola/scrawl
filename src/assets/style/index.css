@@ -90,6 +90,10 @@ html {
   --list-active: rgba(56, 189, 248, 0.14);
   /* 选中行的细焦点描边色（VS Code 在选中行上描一圈很细的框） */
   --list-active-ring: rgba(56, 189, 248, 0.8);
+  /* 侧栏失去焦点后，选中行退到这一档：中性灰、不带主色、不描边（同 VS Code 的
+     list.inactiveSelectionBackground）。刻意不跟 data-accent 走 —— 「这行是选中的，
+     但键盘不在这儿」本身就该是安静的一档，跟着主色亮起来就又抢回注意力了 */
+  --list-inactive: #37373d;
 
   /* 编辑器顶部标签（深色主题）：激活 tab 与编辑器同色（--panel-bg），非激活 tab 和
      标签栏底色一样更深一档（--app-bg），同 VS Code */
@@ -162,6 +166,9 @@ html {
   --panel-hover: #e2e8f0; /* slate-200 */
   --list-active: rgba(2, 132, 199, 0.12);
   --list-active-ring: rgba(2, 132, 199, 0.85);
+  /* 见暗色那块的说明。比 --panel-hover（slate-200）再深一档：
+     一行悬停、另一行选中失焦时，两者要分得开 */
+  --list-inactive: #d7dee8;
 
   /* 编辑器顶部标签（浅色主题）：选中 tab 用明显一点的灰蓝底(--panel-hover slate-200)，
      让它“凸出”可一眼认出；未选中 tab 用接近白的很浅灰(--slate-50)，淡下去 */
