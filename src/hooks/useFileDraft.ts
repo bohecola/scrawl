@@ -79,13 +79,26 @@ interface Callbacks {
   onNotice: (notice: { tone: 'info' | 'warn' | 'error'; text: string }) => void
 }
 
+/**
+ * 新建文件预填的名字。固定 ASCII，不跟界面语言走。
+ *
+ * 它和界面上别的文案不是一回事 —— 这个字符串会原样变成磁盘上的文件名。
+ * 跟着语言翻译的话，同一个人换个界面语言就会在同一个目录里留下
+ * `未命名.js` / `Untitled.js` / `بدون عنوان.js` 好几份，而文件名不像界面文案，
+ * 它要被 import、被路径引用、被 git 记住。这里的一致性比「界面语言下的自然感」重要。
+ *
+ * 小写而不是 Untitled.js：新建的输入框里已经选中了 `untitled` 那一段，
+ * 用户多半直接敲掉它，真正留下这个名字的场景是「直接回车」，那时小写更像临时文件。
+ */
+const NEW_FILE_NAME = 'untitled.js'
+
 /*
-  新建时预填的名字。它会真的落到磁盘上，所以跟着界面语言走 ——
-  英文界面下建出来的就该叫 Untitled.js，而不是硬留一个中文名（VS Code 也是这样）。
+  新建时预填的名字。目录名仍跟界面语言走：它没有后缀、也不会被 import，
+  中文界面下建出来叫「新建文件夹」比 untitled-folder 好认。
   写成函数是因为 t 只有在组件里才拿得到。
 */
 const defaultName = (kind: DraftKind, t: T): string =>
-  kind === 'file' ? t('file.untitled', { ext: 'js' }) : t('file.newDir')
+  kind === 'file' ? NEW_FILE_NAME : t('file.newDir')
 
 export function useFileDraft(
   workspace: Workspace,

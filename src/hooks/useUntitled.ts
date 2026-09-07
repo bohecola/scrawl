@@ -25,6 +25,16 @@ const WRITE_DELAY_MS = 300
 export const untitledKey = (n: number) => `untitled:${n}`
 export const isUntitledKey = (key: string) => key.startsWith('untitled:')
 
+/**
+ * 未命名文件存进目录时，预填名里「后缀之前」那一段：untitled:3 → untitled-3。
+ *
+ * 固定 ASCII，和标签上那个跟界面语言走的「未命名-3」刻意不一样：显示名是给人看的，
+ * 而这个字符串会原样变成磁盘上的文件名 —— 文件名要被 import、被路径引用、被 git 记住，
+ * 不该因为换了界面语言就换一副样子（理由同 useFileDraft 的 NEW_FILE_NAME）。
+ * 编号仍沿用标签上的那个，两边对得上号。
+ */
+export const untitledStem = (key: string) => `untitled-${key.slice('untitled:'.length)}`
+
 export function useUntitled() {
   // 用 state 的惰性初始值而不是 ref：这张表只在回调里读写，从不驱动渲染，但它得是个稳定对象
   const [map] = useState(() => new Map<number, UntitledRecord>())

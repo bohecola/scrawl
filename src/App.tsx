@@ -11,7 +11,7 @@ import { StatusBar } from './components/StatusBar'
 import { TabStrip } from './components/TabStrip'
 import { useNotice } from './hooks/useNotice'
 import { useTabs, ACTIVE_KEY } from './hooks/useTabs'
-import { useUntitled, untitledKey, isUntitledKey } from './hooks/useUntitled'
+import { useUntitled, untitledKey, isUntitledKey, untitledStem } from './hooks/useUntitled'
 import { useDemoSaver } from './hooks/useDemoSaver'
 import { useExternalChangeWatcher } from './hooks/useExternalChangeWatcher'
 import type { ActiveFile, Language, LocalMeta } from './types'
@@ -630,7 +630,9 @@ function App() {
           promotingKeyRef.current = file.key
           fileDraft.start('file', {
             content: code,
-            defaultName: `${file.name}.${file.language === 'typescript' ? 'ts' : 'js'}`,
+            // 名字从 key 推，不是从 file.name —— 后者是翻译过的标签标题（「未命名-1」），
+            // 会把界面语言带到磁盘上。见 untitledStem
+            defaultName: `${untitledStem(file.key)}.${file.language === 'typescript' ? 'ts' : 'js'}`,
           })
           setNotice({
             tone: 'info',
