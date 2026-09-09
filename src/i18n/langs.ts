@@ -8,9 +8,9 @@
 /**
  * 支持的语言。键名即 localStorage 里存的取值（zh 沿用历史键值，老用户的偏好不用迁移）。
  *   zh  简体中文   zhHant 繁體中文   en  English   fr  Français   de  Deutsch   it  Italiano
- *   ko  한국어     ja     日本語     vi  Tiếng Việt  pt  Português  ar  العربية
+ *   ko  한국어     ja     日本語     vi  Tiếng Việt  pt  Português  ar  العربية     th  ภาษาไทย
  */
-export type Lang = 'zh' | 'zhHant' | 'en' | 'fr' | 'de' | 'it' | 'ko' | 'ja' | 'vi' | 'pt' | 'ar'
+export type Lang = 'zh' | 'zhHant' | 'en' | 'fr' | 'de' | 'it' | 'ko' | 'ja' | 'vi' | 'pt' | 'ar' | 'th'
 
 /** Lang → <html lang> 的 BCP 47 标签（与各字典的 'html.lang' 一致） */
 export const LANG_TAGS: Record<Lang, string> = {
@@ -25,6 +25,7 @@ export const LANG_TAGS: Record<Lang, string> = {
   vi: 'vi',
   pt: 'pt',
   ar: 'ar',
+  th: 'th',
 }
 
 export const ALL_LANGS = Object.keys(LANG_TAGS) as Lang[]

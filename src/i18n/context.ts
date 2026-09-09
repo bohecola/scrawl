@@ -22,7 +22,7 @@ import { langFromTag, LANG_TAGS, type Lang } from './langs'
  *   zh      简体中文   en   English        fr  Français
  *   de      Deutsch     it   Italiano      ko   한국어
  *   ja      日本語      vi   Tiếng Việt    pt   Português
- *   ar      العربية     zhHant  繁體中文
+ *   ar      العربية     th   ภาษาไทย       zhHant  繁體中文
  * 键名即 localStorage 里存的取值（zh 沿用历史键值，老用户的偏好不用迁移）。
  */
 export type { Lang }
@@ -103,6 +103,7 @@ export const LANGS: { value: Lang; label: string }[] = [
   { value: 'pt', label: 'Português' }, // Portuguese
   { value: 'vi', label: 'Tiếng Việt' }, // Vietnamese
   { value: 'ar', label: 'العربية' }, // Arabic
+  { value: 'th', label: 'ภาษาไทย' }, // Thai
   { value: 'ja', label: '日本語' }, // Japanese
   { value: 'zh', label: '简体中文' }, // Chinese (Simplified)
   { value: 'zhHant', label: '繁體中文' }, // Chinese (Traditional)

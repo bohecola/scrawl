@@ -13,7 +13,7 @@
 | Untitled files | Start writing without opening any folder: untitled files are kept in the browser and survive reloads; with a folder open, Ctrl+S names the file and saves it there. |
 | Local file system | Open local folders (several at once) via the browser's File System Access API, browse the directory tree in the sidebar, edit/save/rename/delete files, and use relative `import`s between local files. |
 | Built-in demos | A set of ready-to-run examples; save them all to a local folder with one click to modify. |
-| Multilingual UI | 11 interface languages (including right-to-left layout for Arabic), following the system language by default and switchable in settings. |
+| Multilingual UI | 12 interface languages (including right-to-left layout for Arabic), following the system language by default and switchable in settings. |
 | Themes | Dark / light following the system or set by hand, plus 7 accent colors. |
 
 > Note: Scrawl is a code scratchpad — it runs JavaScript / TypeScript and shows console output. It is **not** an HTML / CSS live preview tool.
