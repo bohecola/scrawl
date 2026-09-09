@@ -52,7 +52,8 @@ async function emitJs(code: string, language: string, key?: string): Promise<str
     const syntax = await worker.getSyntacticDiagnostics(uri)
     if (syntax.length > 0) throw compileError(model, syntax)
     const out = await worker.getEmitOutput(uri)
-    const js = out.outputFiles.find((f) => f.name.endsWith('.js'))?.text
+    // .ts 出 .js，.mts 出 .mjs（.cts 出 .cjs）：只认 .js 会让 .mts 入口报「没有输出」
+    const js = out.outputFiles.find((f) => /\.[mc]?js$/.test(f.name))?.text
     if (js === undefined) throw new AppError('err.compile.raw', { message: 'TypeScript emitted no output' })
     return js
   } catch (err) {

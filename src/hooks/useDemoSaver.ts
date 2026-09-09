@@ -22,6 +22,8 @@ interface UseDemoSaverOptions {
   confirm: Confirm
   t: T
   setNotice: (notice: Notice) => void
+  /** 整套文件落盘并接管成根目录之后：path 是那个总目录的 workspace 路径 */
+  onSaved?: (path: string) => void
 }
 
 /*
@@ -29,7 +31,7 @@ interface UseDemoSaverOptions {
   写入进度、取消、以及启动时对「上次没存完」残留的检测与清理引导。
   写盘本身在 workspace.saveBundle 里；这里管的是围绕它的交互与善后。
 */
-export function useDemoSaver({ workspace, confirm, t, setNotice }: UseDemoSaverOptions) {
+export function useDemoSaver({ workspace, confirm, t, setNotice, onSaved }: UseDemoSaverOptions) {
   /** 把 Demo 存到本地时的写入进度（null 表示当前没有正在进行的保存） */
   const [saveProgress, setSaveProgress] = useState<{
     file: string
@@ -237,6 +239,7 @@ export function useDemoSaver({ workspace, confirm, t, setNotice }: UseDemoSaverO
       // null 有两种：用户在选择器里取消（不该有任何动静），或者出错
       // （原因已经在侧边栏那条 workspace.error 提示条上了）
       if (!saved) return
+      if (saved.opened) onSaved?.(saved.path)
       setNotice({
         tone: 'info',
         text: saved.opened

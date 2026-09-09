@@ -14,11 +14,12 @@ import { useTabs, ACTIVE_KEY } from './hooks/useTabs'
 import { useUntitled, untitledKey, isUntitledKey, untitledStem } from './hooks/useUntitled'
 import { useDemoSaver } from './hooks/useDemoSaver'
 import { useExternalChangeWatcher } from './hooks/useExternalChangeWatcher'
+import { useProjectIndex } from './hooks/useProjectIndex'
 import type { ActiveFile, Language, LocalMeta } from './types'
 import Sidebar from './components/Sidebar'
 import ConfirmDialog from './components/ConfirmDialog'
 import { listTemplates, loadTemplate } from './hooks'
-import { useWorkspace, type WorkspaceRoot } from './hooks/useWorkspace'
+import { useWorkspace, rootIdOf, type WorkspaceRoot } from './hooks/useWorkspace'
 import { useFileDraft } from './hooks/useFileDraft'
 import { useConfirm } from './hooks/useConfirm'
 import {
@@ -42,6 +43,10 @@ import { messageOf, useI18n } from '@/i18n/context'
 const CONSOLE_MIN = 220 // px，任何一侧至少保住的宽度
 const SNAP = 20 // px：距正中 50% 这么近就会被磁吸住
 const SNAP_RELEASE = 32 // px：已经吸在正中间后，得拖开这么远才挣脱（更强的顿感）
+/** 本地目录里的文件：key 是 `local:<workspace 路径>`（见 types.ts 里 ActiveFile 的说明） */
+const isLocalKey = (key: string) => key.startsWith('local:')
+const localPathOf = (key: string) => key.slice('local:'.length)
+
 // 按文件后缀猜语言（导入 .ts 文件时自动切到 TS，否则代码不会经过 TS 编译）
 function languageFromFilename(name: string): Language {
   return /\.(ts|tsx|mts|cts)$/i.test(name) ? 'typescript' : 'javascript'
@@ -56,6 +61,8 @@ function withLanguageExt(filename: string, language: string): string {
 function App() {
   const templates = listTemplates()
   const workspace = useWorkspace()
+  // 本地目录里的源码整体喂给 TS 语言服务，跨文件 import 才有补全（见 lib/project-index.ts）
+  const projectIndex = useProjectIndex(workspace)
   // 这两个方法在 effect / useCallback 里用，摘出来当依赖：整个 workspace 当依赖的话
   // 每次目录树变动都会重跑，而这两处只关心「路径怎么解析」
   const { resolveFilePath, displayPath } = workspace
@@ -97,8 +104,12 @@ function App() {
     confirm,
     t,
     onEmpty: () => openUntitled(),
-    // 关掉的未命名文件从 IndexedDB 里删掉，不然下次刷新它又回来了
-    onClosed: (keys) => keys.filter(isUntitledKey).forEach((key) => untitled.remove(key)),
+    // 关掉的未命名文件从 IndexedDB 里删掉，不然下次刷新它又回来了；
+    // 本地文件关掉后索引里改回磁盘内容（用户可能选了「不保存」，缓冲区那版不能留）
+    onClosed: (keys) => {
+      keys.filter(isUntitledKey).forEach((key) => untitled.remove(key))
+      keys.filter(isLocalKey).forEach((key) => void projectIndex.reload(localPathOf(key)))
+    },
     // 关闭脏标签时点了「保存」；只有保存真能落地时才给这个选项（否则保存 = 下载）
     onSave: (file) => saveFile(file),
     canSave: (file) => (file.kind === 'local' && !!file.handle) || (file.kind === 'untitled' && workspace.hasRoot),
@@ -169,6 +180,8 @@ function App() {
     confirm,
     t,
     setNotice,
+    // 存进的是已经打开着的根时，roots 不会变，索引得自己知道多了一批文件
+    onSaved: (path) => void projectIndex.rescan(rootIdOf(path)),
   })
   /** 单个文件保存的防重入锁：写入中再按 Ctrl+S 直接忽略，避免叠加/排队 */
   const savingRef = useRef(false)
@@ -354,6 +367,7 @@ function App() {
     if (!ok) return
     // 失败原因已经在 workspace.error 里，走侧边栏那条提示条
     if (!(await workspace.deleteEntry(entry))) return
+    projectIndex.remove(entry.path)
 
     for (const key of keys) {
       editorRef.current?.close(key)
@@ -419,6 +433,7 @@ function App() {
     // 一个目录改名可能连带改多个已打开文件的 key（子树里的）。
     const oldActive = active?.key
     const tabUpdates = new Map<string, ActiveFile>()
+    projectIndex.rename(from.path, to.path)
     for (const oldKey of affectedKeys(from.path)) {
       const newPath = to.path + oldKey.slice(`local:${from.path}`.length)
       const newKey = `local:${newPath}`
@@ -523,8 +538,8 @@ function App() {
     }
     // 上次那个本地文件：path 的第一段是根 id，resolveFilePath 自己会判断
     // 那个根这次在不在、有没有权限，拿不到就走兜底
-    if (saved?.startsWith('local:')) {
-      const path = saved.slice('local:'.length)
+    if (saved && isLocalKey(saved)) {
+      const path = localPathOf(saved)
       void resolveFilePath(path)
         .then((handle) =>
           handle ? openLocalFile({ kind: 'file', name: handle.name, path, handle }) : fallback()
@@ -703,7 +718,7 @@ function App() {
   function moduleHost(file: ActiveFile): ModuleHost | null {
     if (file.kind !== 'local') return null
     return {
-      entryPath: file.key.slice('local:'.length),
+      entryPath: localPathOf(file.key),
       exists: async (path) => (await workspace.resolveFilePath(path)) !== null,
       readSource: async (path) => {
         const name = path.slice(path.lastIndexOf('/') + 1)
@@ -863,6 +878,8 @@ function App() {
                 onDirtyChange={handleDirtyChange}
                 onChange={(key, value) => {
                   if (isUntitledKey(key)) untitled.update(key, value)
+                  // 另一种语言的 worker 看不到这个 model，未保存的内容要靠索引转交
+                  else if (isLocalKey(key)) projectIndex.setContent(localPathOf(key), value)
                 }}
                 onSave={handleSave}
                 onCursorStatus={setCursor}
