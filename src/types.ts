@@ -9,6 +9,12 @@ import type { FileEncoding } from './lib/fs-access'
  */
 export type LogLevel = 'log' | 'info' | 'debug' | 'warn' | 'error' | 'table' | 'time' | 'trace' | 'group'
 
+/** 预览 iframe 的页面日志 level 是外部进来的字符串，得先守卫再当 LogLevel 用 */
+export function isLogLevel(v: unknown): v is LogLevel {
+  return typeof v === 'string' && (LOG_LEVELS as readonly string[]).includes(v)
+}
+const LOG_LEVELS: readonly LogLevel[] = ['log', 'info', 'debug', 'warn', 'error', 'table', 'time', 'trace', 'group']
+
 export interface ConsoleMessage {
   id: number
   type: LogLevel
@@ -25,7 +31,7 @@ export type Language = 'javascript' | 'typescript'
 
 /*
   打开的文件用一个 key 唯一标识，它同时是 Monaco model 的 key 和侧边栏的选中态：
-    builtin:../template/overrides/call.js   内置 Demo（源码打包进来的，可改但存不回去）
+    builtin:../resources/demos/overrides/call.js  内置 Demo（源码打包进来的，可改但存不回去）
     local:src/lib/foo.ts                    用户本地目录里的文件，有 handle，能写回磁盘
     untitled:1                              未命名文件（VS Code 的 Untitled-1）：不落在任何目录里，
                                             可以开多份，内容存在 IndexedDB 里刷新不丢；首屏默认就是一份

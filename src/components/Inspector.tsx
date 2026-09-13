@@ -405,11 +405,13 @@ function Inspector({ value, name, depth = 0, width = Infinity }: InspectorProps)
   const availPx = width - GUTTER_PX - (name != null ? measure(`${name}: `) : 0)
   const fit = useMemo(() => (node?.spec ? fitPreview(node.spec, availPx) : null), [node, availPx])
 
-  // 普通单值（非对象/数组，或标记值）：留空折叠槽，让 key 与可展开行对齐
+  // 普通单值（非对象/数组，或标记值）：嵌套在对象树里的（有 name）留空折叠槽，
+  // 让 key 与可展开的兄弟行对齐；顶层日志参数没有 name 也没有兄弟行可对，
+  // 不留槽直接贴正文列左缘 —— 否则 console.log(3) 比 console.log('hi') 凭空缩进一格
   if (!node) {
     return (
       <div className="flex leading-5">
-        <span className={cn('shrink-0', GUTTER)} />
+        {name != null && <span className={cn('shrink-0', GUTTER)} />}
         <span className="min-w-0 break-words whitespace-pre-wrap">
           {label}
           <ValueText value={value} />

@@ -17,6 +17,7 @@ import { LANG_TAGS } from '@/i18n/langs'
 import { codeRunner, type RawConsoleMessage } from '@/lib/runner'
 import { measure, setMeasureFont } from '@/lib/text-width'
 import type { ConsoleMessage, LogLevel } from '../types'
+import { isLogLevel } from '../types'
 import Inspector from './Inspector'
 
 export interface ConsoleHandle {
@@ -42,9 +43,7 @@ const LEVEL_META: Record<LogLevel, { color: string; badge: string }> = {
   group: { color: 'text-[var(--text-primary)] font-semibold', badge: '' },
 }
 
-function isLogLevel(v: unknown): v is LogLevel {
-  return typeof v === 'string' && v in LEVEL_META
-}
+// isLogLevel 从 types.ts 导入：PreviewPanel 也要做同样的守卫，一份实现两处用
 
 // 与 Tailwind 类对应的像素常量：可用宽度是拿 measure 量的，类名读不出数值，改类时同步。
 // px-2（容器左右内边距合计）、gap-2（行内各列之间）、px-1（徽标两侧合计）、me-1（group ▾ 的行末边距）
@@ -75,8 +74,11 @@ function renderArg(arg: unknown, key: string | number, width: number) {
 
 function renderArgs(args: unknown[], key: string, width: number) {
   if (args.length === 1) return renderArg(args[0], key, width)
+  // 顶部对齐而不是基线对齐：可展开值的基线取自行首的折叠三角（图标），和文字基线差 2px，
+  // items-baseline 会让它在多参数行里整体被顶上去一点。各片段都是 12px 字号 20px 行高，
+  // 首行顶部对齐时文字基线天然一致
   return (
-    <span key={key} className="flex flex-wrap items-baseline gap-x-2">
+    <span key={key} className="flex flex-wrap items-start gap-x-2">
       {args.map((a, i) => renderArg(a, i, width))}
     </span>
   )
