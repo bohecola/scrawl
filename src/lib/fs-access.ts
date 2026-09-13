@@ -32,6 +32,7 @@ const IGNORED_DIRS = new Set([
   '.turbo',
   '.cache',
   '.parcel-cache',
+  '.pnpm-store',
   'coverage',
   '.idea',
   '.DS_Store',
@@ -41,6 +42,14 @@ const IGNORED_DIRS = new Set([
   'target',
   'vendor',
 ])
+
+/*
+  名单里的目录分两档处理（见 listDirectory）：
+  - 以点开头的工具内部目录（.git / .pnpm-store / .cache …）直接不列出——
+    浏览它们没有任何价值，列出来只是噪音；VS Code 默认也是把 .git 整个藏掉的；
+  - 其余（node_modules / dist / build …）是用户的产物目录，置灰沉底但保留可展开——
+    比如想看看 dist 里构建出来的 index.html，藏掉反而伤。
+*/
 
 /**
  * 单个目录最多列多少条。dist 里几千个文件足以把树撑爆，
@@ -170,6 +179,11 @@ export async function listDirectory(
   let count = 0
 
   for await (const [name, handle] of dir.entries()) {
+    // 点开头的忽略目录（.git / .pnpm-store …）整个跳过，连计数都不占；
+    // 非点的（node_modules / dist …）照常列出，靠 ignored 标记置灰沉底
+    if (handle.kind === 'directory' && IGNORED_DIRS.has(name) && name.startsWith('.')) {
+      continue
+    }
     if (++count > MAX_ENTRIES_PER_DIR) {
       truncated = true
       break
