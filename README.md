@@ -11,10 +11,10 @@
 | Instant execution | Code runs in a dedicated Web Worker, so the UI stays responsive; top-level `await` works and `while (true)` loops can be stopped with one click. |
 | HTML preview | HTML files render in a sandboxed iframe beside the console; the page's `console` output, warnings, and errors are captured into the same console. |
 | Markdown preview | `.md` files render as styled documents next to the editor, following the app theme; edits refresh the preview automatically. |
-| Monaco editor | The same editor that powers VS Code, with syntax highlighting, autocompletion, and TypeScript type checking; multiple tabs, with font size, editor theme, and file icons adjustable in settings. |
+| Monaco editor | The same editor that powers VS Code, with syntax highlighting, autocompletion, cross-file import suggestions, TypeScript type checking, and Emmet abbreviation expansion (`!`, `div.card>li*5`, `m10`…); multiple tabs, with font size, editor theme, and file icons adjustable in settings. |
 | Untitled files | Start writing without opening any folder: untitled files are kept in the browser and survive reloads; with a folder open, Ctrl+S names the file and saves it there. |
 | Local file system | Open local folders (several at once) via the browser's File System Access API, browse the directory tree in the sidebar, edit/save/rename/delete files, and use relative `import`s between local files. |
-| Built-in demos | A set of ready-to-run examples; save them all to a local folder with one click to modify. |
+| Built-in demos | Ready-to-run examples live in the resources panel (top right); save them all to a local folder with one click to modify. |
 | Multilingual UI | 12 interface languages (including right-to-left layout for Arabic), following the system language by default and switchable in settings. |
 | Themes | Dark / light following the system or set by hand, plus 7 accent colors. |
 
