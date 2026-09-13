@@ -5,6 +5,19 @@ import { debounce, sortBy } from 'lodash-es'
 import { useTheme } from '@/theme/index'
 import { useSettings, fontFamilyOf, type EditorSettings } from '@/settings/context'
 import { resolveEditorTheme } from '@/monaco/themes'
+import { emmetCSS, emmetHTML } from 'emmet-monaco-es'
+
+/*
+  emmet：HTML / CSS 的缩写展开（! → HTML5 骨架、div.class>li*5、m10 → margin: 10px …）。
+  官方推荐给 Monaco 的封装，补全建议和 Tab 展开都由它接管——光标前不是合法缩写时
+  Tab 仍是缩进，不抢普通编辑的键位。注册在模块顶层：provider 按语言全局注册，
+  模块只执行一次，StrictMode 双挂载也不会重复；返回的 dispose 只在热更新重跑时有意义，
+  页面生命周期内不需要。
+  以后加 jsx 运行时的话，对应的一行是 emmetJSX(monaco, ['javascript'])——先不挂：
+  它会对所有 JS 文件生效，普通 JS 里 Tab 的行为变化太大。
+*/
+emmetHTML(monaco, ['html', 'xml'])
+emmetCSS(monaco, ['css', 'scss', 'less'])
 
 /*
   一个编辑器实例 + 每个文件一个 model。
