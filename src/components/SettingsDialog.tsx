@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Segmented } from '@/components/ui/segmented'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isMac } from '@/lib/platform'
@@ -224,45 +225,6 @@ function Group({ title, children }: { title?: string; children: ReactNode }) {
       )}
       <div className="flex flex-col gap-1">{children}</div>
     </section>
-  )
-}
-
-/** 分段选择（明暗三态） */
-function Segmented<T extends string>({
-  value,
-  onChange,
-  options,
-}: {
-  value: T
-  onChange: (v: T) => void
-  options: { value: T; icon: string; label: string }[]
-}) {
-  return (
-    <div role="radiogroup" className="flex rounded-md bg-[var(--panel-hover)] p-0.5">
-      {options.map((o) => {
-        const on = o.value === value
-        return (
-          <button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={on}
-            title={o.label}
-            aria-label={o.label}
-            onClick={() => onChange(o.value)}
-            className={cn(
-              'flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] transition-colors',
-              on
-                ? 'bg-[var(--panel-bg)] text-[var(--text-primary)] shadow-sm'
-                : 'text-[var(--text-muted)] hover:text-[var(--text-body)]'
-            )}
-          >
-            <Icon className={cn('size-3.5', o.icon)} />
-            {o.label}
-          </button>
-        )
-      })}
-    </div>
   )
 }
 
