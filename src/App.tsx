@@ -864,7 +864,7 @@ function App() {
                   </Button>
                 )}
                 <Button variant="secondary" size="sm" onClick={() => setResourcesOpen(true)}>
-                  <Icon className="icon-[lucide--library]" />
+                  <Icon className="icon-[lucide--shapes]" />
                   {t('resources.browse')}
                 </Button>
               </div>
