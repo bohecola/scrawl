@@ -4,14 +4,14 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 import Editor, { EditorHandle, type CursorStatus } from './components/Editor'
-import Console, { ConsoleHandle } from './components/Console'
+import type { ConsoleHandle } from './components/Console'
 import { HeaderBar } from './components/HeaderBar'
 import { NoticeBar } from './components/NoticeBar'
 import { StatusBar } from './components/StatusBar'
 import { TabStrip } from './components/TabStrip'
 import { useNotice } from './hooks/useNotice'
 import { useTabs, ACTIVE_KEY } from './hooks/useTabs'
-import { useUntitled, untitledKey, isUntitledKey, untitledStem } from './hooks/useUntitled'
+import { useUntitled, untitledKey, isUntitledKey } from './hooks/useUntitled'
 import { useDemoSaver } from './hooks/useDemoSaver'
 import { useExternalChangeWatcher } from './hooks/useExternalChangeWatcher'
 import { useProjectIndex } from './hooks/useProjectIndex'
@@ -32,6 +32,12 @@ import {
   type FileEntry,
 } from './lib/fs-access'
 import { codeRunner } from './lib/runner'
+import { renderPagePreview } from './lib/preview/render-html'
+import { renderMarkdownPreview } from './lib/preview/render-markdown'
+import { previewOf, isExecutable } from './lib/file-types'
+import type { OutputView } from './hooks/useOutputLayout'
+import OutputPanel from './components/OutputPanel'
+import { debounce } from 'lodash-es'
 import type { ModuleHost } from './lib/module-graph'
 import { startPointerDrag } from './lib/pointer-drag'
 import { shortcut, isRtl } from './lib/platform'
@@ -71,6 +77,8 @@ function App() {
   // 窄屏（手机竖屏）：编辑器与 Console 上下堆叠，分栏把手隐藏，侧栏默认收起（useSidebarCollapsed 里判断）
   const narrow = useMediaQuery('(max-width: 767px)')
   const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
+  // 资源面板的开关放在这里：顶栏按钮和欢迎页的「浏览资源」都能打开它
+  const [resourcesOpen, setResourcesOpen] = useState(false)
 
   const editorRef = useRef<EditorHandle>(null)
   const consoleRef = useRef<ConsoleHandle>(null)
@@ -103,7 +111,6 @@ function App() {
     editorRef,
     confirm,
     t,
-    onEmpty: () => openUntitled(),
     // 关掉的未命名文件从 IndexedDB 里删掉，不然下次刷新它又回来了；
     // 本地文件关掉后索引里改回磁盘内容（用户可能选了「不保存」，缓冲区那版不能留）
     onClosed: (keys) => {
@@ -208,6 +215,59 @@ function App() {
 
   const language = active?.language ?? 'javascript'
   const runnable = isRunnable(language)
+  // 运行按钮的可用性：JS/TS 进 worker，HTML 进预览，都算「可执行」
+  const executable = isExecutable(language)
+
+  // 右栏双视图：Console 是「程序的输出」，预览是「页面的样子」。tabs 模式下显示哪个由这里定：
+  // 自动切换只定默认值，用户点过标签后以手动选择为准，直到下次切文件。
+  // 布局本身（标签 / 分栏、方向、顺序）归 OutputPanel 自己管
+  const [outputView, setOutputView] = useState<OutputView>('console')
+  // 上次运行时产出的预览文档；null = 还没运行过（预览显示空态）
+  const [previewDoc, setPreviewDoc] = useState<string | null>(null)
+  // HTML 缓冲区在上次运行后有没有改过（预览头部的脏点）
+  const [previewDirty, setPreviewDirty] = useState(false)
+  // 运行序号：内容没变时也点刷新，得让 iframe 真的重载（相同 srcDoc React 不会动它），
+  // 文档尾部塞个序号注释就是为此，顺便标识「这是第几次运行的产物」
+  const previewRunRef = useRef(0)
+
+  // document 模式（markdown）的预览是活的：编辑停手 500ms 就重渲染，不跟「运行」模型。
+  // 回调带着 key 防串台：防抖回来时用户可能已经切到别的文件了，那份过期内容不能灌进新文件的预览。
+  // 放在 effect 里创建：防抖闭包要读 activeRef，React 不允许渲染期间碰 ref
+  const renderDocRef = useRef<((key: string, value: string) => void) | null>(null)
+  useEffect(() => {
+    const fn = debounce((key: string, value: string) => {
+      if (activeRef.current?.key === key) setPreviewDoc(renderMarkdownPreview(value, themeOf()))
+    }, 500)
+    renderDocRef.current = fn
+    return () => fn.cancel()
+  }, [activeRef])
+
+  // 主题切换时 document 模式的预览要跟着换肤（page 模式是用户的页面，不动）。
+  // data-theme 挂在 <html> 上，没有 React 事件可订阅，只能盯着属性变
+  const [themeTick, setThemeTick] = useState(0)
+  useEffect(() => {
+    const observer = new MutationObserver(() => setThemeTick((n) => n + 1))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  // document 模式的换肤渲染：主题变了文档外壳得跟上，编辑中的刷新由上面的防抖负责
+  const themeOf = () => (document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark')
+
+  useEffect(() => {
+    setOutputView(previewOf(language) ? 'preview' : 'console')
+    // 切文件就重置预览数据：预览永远是「当前这个文件」的，带着上个文件的旧页面反而误导
+    setPreviewDoc(null)
+    setPreviewDirty(false)
+  }, [active?.key, language])
+
+  // document 模式打开即渲染（page 模式要手动运行，走 runCode）；
+  // 换肤也在这里重渲染——主题变了文档外壳得跟上，编辑中的刷新由上面的防抖负责
+  useEffect(() => {
+    const key = active?.key
+    if (!key || previewOf(language)?.mode !== 'document') return
+    setPreviewDoc(renderMarkdownPreview(editorRef.current?.getValue(key) ?? '', themeOf()))
+  }, [active?.key, language, themeTick])
 
   useEffect(() => () => codeRunner.destroy(), [])
 
@@ -221,14 +281,15 @@ function App() {
   const openTemplate = useCallback(
     async (path: string) => {
       const key = `builtin:${path}`
-      const name = path.replace('../template/', '')
+      const name = path.replace('../resources/', '')
       const seq = ++openSeqRef.current
       try {
         // Demo 源码是打包进来的字符串，重复读代价忽略不计；
         // model 已经存在时 open() 会忽略 value，用户改过的内容不会被冲掉
         const code = await loadTemplate(path)
         if (seq !== openSeqRef.current) return // 期间用户又打开了别的
-        const language = languageFromFilename(name)
+        // 语言跟着后缀走：资源清单将来会有 html（图表示例）/ css（布局示例）条目
+        const language = languageOf(name) ?? 'javascript'
         editorRef.current?.open({ key, value: code, language })
         openOrActivate({ key, kind: 'builtin', name, language, encoding: 'UTF-8' })
         consoleRef.current?.clear()
@@ -293,7 +354,7 @@ function App() {
   /**
    * 未命名文件（Untitled-N）。不落在任何目录里，可以开多份，内容存在 IndexedDB 里（见 hooks/useUntitled）。
    * openUntitled 新建一份并切过去；restoreUntitled 在启动时把上次的全部开成标签（不激活）。
-   * 首屏默认、标签全关掉后的兜底、上次的文件恢复失败，都走 openUntitled。
+   * 入口：欢迎页 / 标签栏「+」/ Alt+N。零标签（welcome 页）是合法状态，不再自动兜底开文件。
    */
   const openUntitled = useCallback(() => {
     const row = untitled.create()
@@ -374,9 +435,8 @@ function App() {
       handleDirtyChange(key, false) // close 不触发 onDirtyChange
       localMetaRef.current.delete(key)
     }
-    // 标签栏里同步移除这些文件的标签；删掉的正是激活的那个就开一份新的未命名文件。
-    // 不引入「一个都没打开」这种没验证过的状态（其它没删的标签仍在栏里，不影响）。
-    if (dropTabsByKeys(keys)) openUntitled()
+    // 标签栏里同步移除这些文件的标签；删掉的正是激活的那个就落到欢迎页（零标签是合法状态）。
+    dropTabsByKeys(keys)
     setNotice({ tone: 'info', text: t('notice.deleted', { name: entry.name }) })
   }
 
@@ -416,8 +476,8 @@ function App() {
       handleDirtyChange(key, false) // close 不触发 onDirtyChange
       localMetaRef.current.delete(key)
     }
-    // 标签栏同步移除；激活的那个就在这棵树里则开一份新的未命名文件（和删除时一致）
-    if (dropTabsByKeys(keys)) openUntitled()
+    // 标签栏同步移除；激活的那个在移除的文件里则落到欢迎页（零标签是合法状态）
+    dropTabsByKeys(keys)
     setNotice({ tone: 'info', text: t('notice.rootRemoved', { name: root.name }) })
   }
 
@@ -527,8 +587,8 @@ function App() {
     }
     const fallback = () => {
       const first = restored[0]
+      // 接不上任何上次的文件：停在零标签的欢迎页，不再自动开空白 JS
       if (first) activate(first)
-      else openUntitled()
     }
 
     const savedUntitled = saved && isUntitledKey(saved) ? restored.find((x) => x.key === saved) : undefined
@@ -544,7 +604,7 @@ function App() {
         .then((handle) =>
           handle ? openLocalFile({ kind: 'file', name: handle.name, path, handle }) : fallback()
         )
-        // 解析失败（目录已失效之类）也得有个能落脚的标签，别停在一个标签都没有的状态
+        // 解析失败（目录已失效之类）也走兜底：接得上别的标签就接，接不上就是欢迎页
         .catch(fallback)
       return
     }
@@ -556,7 +616,7 @@ function App() {
       return
     }
     fallback()
-  }, [workspace.ready, untitled.ready, resolveFilePath, templates, openTemplate, openLocalFile, openUntitled, restoreUntitled, setActiveKey])
+  }, [workspace.ready, untitled.ready, resolveFilePath, templates, openTemplate, openLocalFile, restoreUntitled, setActiveKey])
 
   // 正在写 demo、或有文件改了还没保存时离开/刷新：尽力弹一次确认。浏览器可能淡化甚至
   // 不显示自定义文案，但这是唯一不需要持久化就能拦一下的手段；
@@ -618,7 +678,7 @@ function App() {
     const ext = file.language === 'typescript' ? 'ts' : 'js'
     // 内置 Demo 的 name 是带目录的相对路径，下载文件名不能有斜杠
     const base = file.name.split('/').pop() || `code.${ext}`
-    // 未命名的名字没有后缀（「未命名-1」），按语言补一个
+    // 未命名的名字没有后缀（「Untitled-1」），按语言补一个
     const filename = file.kind === 'untitled' ? `${file.name}.${ext}` : withLanguageExt(base, file.language)
 
     const blob = new Blob([code], { type: 'text/plain;charset=utf-8' })
@@ -650,12 +710,8 @@ function App() {
         // 让用户在侧边栏里补上，比丢进下载目录有用得多
         if (file.kind === 'untitled' && workspace.hasRoot) {
           promotingKeyRef.current = file.key
-          fileDraft.start('file', {
-            content: code,
-            // 名字从 key 推，不是从 file.name —— 后者是翻译过的标签标题（「未命名-1」），
-            // 会把界面语言带到磁盘上。见 untitledStem
-            defaultName: `${untitledStem(file.key)}.${file.language === 'typescript' ? 'ts' : 'js'}`,
-          })
+          // 名字留空让用户起（同侧边栏新建，见 useFileDraft.defaultName），这里只带上内容
+          fileDraft.start('file', { content: code })
           setNotice({
             tone: 'info',
             text: t('notice.draftWillSaveTo', { path: displayPath(workspace.target) }),
@@ -699,11 +755,18 @@ function App() {
 
   useExternalChangeWatcher({ activeRef, dirtyRef, localMetaRef, editorRef, setTabs, setNotice, t })
 
-  // 运行：在 Web Worker 里执行用户代码，主线程不卡，死循环也能用「停止」强制终止。
+  // 运行：JS/TS 在 Web Worker 里执行，主线程不卡，死循环也能用「停止」强制终止。
   // TS 代码先由 Monaco 的 TS worker 转成 JS（见 lib/compile.ts）。
+  // HTML 不进 worker：把整篇文档（注入 console 桥后）灌进预览 iframe，Ctrl+Enter 同样触发。
   function runCode() {
-    if (!active || !runnable) return
-    consoleRef.current?.clear()
+    if (!active) return
+    if (previewOf(language)?.mode === 'page') {
+      consoleRef.current?.clear()
+      setPreviewDoc(renderPagePreview(editorRef.current?.getValue(active.key) ?? '') + `<!--scrawl-run:${++previewRunRef.current}-->`)
+      setPreviewDirty(false)
+      return
+    }
+    if (!runnable) return
     void codeRunner.run(
       editorRef.current?.getValue(active.key) ?? '',
       language,
@@ -749,6 +812,15 @@ function App() {
         onToggleSidebar={() => setSidebarCollapsed((c) => !c)}
         showImport={!workspace.supported}
         onImport={handleImport}
+        resources={{
+          open: resourcesOpen,
+          onOpenChange: setResourcesOpen,
+          onOpenTemplate: (path) => void openTemplate(path),
+          onSaveDemos: () => void saveDemos(),
+          onCancelSave: () => void cancelSave(),
+          cancelling,
+          saveProgress,
+        }}
       />
 
       {/* warn / error 的右下角浮层通知；info 类反馈显示在底部状态栏 */}
@@ -758,17 +830,11 @@ function App() {
         <Sidebar
           workspace={workspace}
           draft={fileDraft}
-          templates={templates}
           activeKey={active?.key ?? null}
           dirtyKeys={dirtyKeys}
           collapsed={sidebarCollapsed}
-          onOpenTemplate={(path) => void openTemplate(path)}
           onOpenLocalFile={(entry) => void openLocalFile(entry, { preserveFocus: true })}
           onFocusEditor={() => editorRef.current?.focus()}
-          onSaveDemos={() => void saveDemos()}
-          onCancelSave={() => void cancelSave()}
-          cancelling={cancelling}
-          saveProgress={saveProgress}
           onRenameEntry={fileDraft.startRename}
           onDeleteEntry={(entry) => void handleDelete(entry)}
           onCopyPath={handleCopyPath}
@@ -778,14 +844,39 @@ function App() {
         {/* 主区域：编辑器 + 输出。铺满剩余空间，中间/外边不留距，两者可拖拽分栏 */}
         <main
           ref={mainRef}
-          className="flex min-h-0 min-w-0 flex-1 overflow-hidden max-md:flex-col"
+          className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden max-md:flex-col"
         >
+          {/* 零标签的欢迎页：盖住主区（空的编辑器和 Console 没什么可看的）。
+              入口：新建 / 打开目录 / 浏览资源 —— 新手没内容的时候正是找示例的时候。
+              注意 Editor 保持挂载不卸，用户从欢迎页开文件时 model 管线不用重建 */}
+          {!active && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-[var(--panel-bg)]">
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={openUntitled}>
+                  <Icon className="icon-[lucide--file-plus]" />
+                  {t('tab.new')}
+                  <span className="ms-1 text-[11px] text-[var(--text-faint)]">{shortcut.newFile}</span>
+                </Button>
+                {workspace.supported && (
+                  <Button variant="secondary" size="sm" onClick={() => void workspace.pick()}>
+                    <Icon className="icon-[codicon--folder-opened]" />
+                    {t('sidebar.openFolder')}
+                  </Button>
+                )}
+                <Button variant="secondary" size="sm" onClick={() => setResourcesOpen(true)}>
+                  <Icon className="icon-[lucide--library]" />
+                  {t('resources.browse')}
+                </Button>
+              </div>
+            </div>
+          )}
           {/* 左：编辑器（窄屏时在上） */}
           <section
             data-editor-pane
             style={editorW === null || narrow ? undefined : { width: editorW, flex: '0 0 auto' }}
             className={cn(
-              'flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--panel-bg)]',
+              // isolate：Monaco 内部带 z-index 的层（小地图、概览标尺）别冒出来盖住旁边悬浮的分栏命中区
+              'isolate flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--panel-bg)]',
               (editorW === null || narrow) && 'flex-1'
             )}
           >
@@ -852,14 +943,14 @@ function App() {
                 {/* Run 禁用时按钮是 pointer-events-none，title 不弹；用外层 span 承载说明 */}
                 <span
                   className="inline-flex"
-                  title={runnable ? `${t('editor.run')} (${shortcut.run})` : t('editor.runDisabled')}
+                  title={executable ? `${t('editor.run')} (${shortcut.run})` : t('editor.runDisabled')}
                 >
                   <Button
                     variant="ghost"
                     size="icon-xs"
                     className="text-[var(--primary)] hover:bg-[var(--primary)]/12 hover:text-[var(--primary)]"
                     onClick={runCode}
-                    disabled={!runnable}
+                    disabled={!executable}
                     aria-label={t('editor.run')}
                   >
                     <Icon className="icon-[lucide--play] [&_[data-slot=icon]]:size-3.5" />
@@ -880,6 +971,10 @@ function App() {
                   if (isUntitledKey(key)) untitled.update(key, value)
                   // 另一种语言的 worker 看不到这个 model，未保存的内容要靠索引转交
                   else if (isLocalKey(key)) projectIndex.setContent(localPathOf(key), value)
+                  // 预览跟「运行」模型：缓冲区改了但没重跑时，预览头部亮脏点
+                  if (key === active?.key && previewOf(language)?.mode === 'page') setPreviewDirty(true)
+                  // document 模式（markdown）没有「重跑」概念：编辑停手即刷新
+                  if (key === active?.key && previewOf(language)?.mode === 'document') renderDocRef.current?.(key, value)
                 }}
                 onSave={handleSave}
                 onCursorStatus={setCursor}
@@ -887,10 +982,11 @@ function App() {
             </div>
           </section>
 
-          {/* 右：输出。Console 头部与编辑器头部同为 h-9 + 一条 border-b，两条底边落在
+          {/* 右：输出（OutputPanel）。它的标签栏与编辑器头部同为 h-9 + 一条 border-b，两条底边落在
               同一水平线，配合下方紧贴的分栏，两栏看起来像被中间一条发丝线分成的一整块 */}
-          {/* 拖拽分栏：命中区本身铺面板色，因此不露 app 背景、没有“暗缝”；两栏基本紧贴，
-              平时只留一根细缝线，鼠标放上去加粗到 4px 并亮主色，拖动时保持 hover 那个亮度 */}
+          {/* 拖拽分栏（同侧栏把手、VS Code 的 sash）：布局里只占 1px 发丝线，两侧的标签栏 / 面板
+              直接贴着它；5px 命中区悬浮跨在线两侧，不占位；鼠标放上去线加粗到 4px 并亮主色，
+              拖动时保持 hover 那个亮度 */}
           <div
             role="separator"
             aria-orientation="vertical"
@@ -910,34 +1006,26 @@ function App() {
             }}
             title={t('panes.resize')}
             aria-label={t('panes.resize')}
-            className="group relative w-[5px] shrink-0 cursor-col-resize touch-none select-none bg-[var(--panel-bg)] outline-none focus-visible:bg-[var(--primary)]/30 max-md:hidden"
+            className="group relative z-10 w-px shrink-0 cursor-col-resize touch-none select-none bg-[var(--border)] outline-none max-md:hidden"
           >
+            {/* 命中区：比线宽，向两侧各伸 2px */}
+            <span className="absolute -inset-x-[2px] inset-y-0" />
             <span
               className={cn(
-                'absolute inset-y-0 left-1/2 -translate-x-1/2 transition-[width,background-color] duration-100',
-                splitting
-                  ? 'w-[4px] bg-[var(--primary)]/70'
-                  : 'w-px bg-[var(--border)] group-hover:w-[4px] group-hover:bg-[var(--primary)]/70'
+                'absolute inset-y-0 left-1/2 w-[4px] -translate-x-1/2 bg-[var(--primary)]/70 transition-opacity duration-100',
+                splitting ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-visible:opacity-40'
               )}
             />
           </div>
-          <section className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--panel-bg)] max-md:min-h-[180px] max-md:border-t max-md:border-[var(--border)] md:min-w-[220px]">
-            <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--border)] ps-3 pe-1.5 text-[12.5px] tracking-wide text-[var(--text-muted)]">
-              <span>Console</span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => consoleRef.current?.clear()}
-                title={t('console.clear')}
-                aria-label={t('console.clear')}
-              >
-                <Icon className="icon-[lucide--ban]" />
-              </Button>
-            </div>
-            <div className="min-h-0 flex-1">
-              <Console ref={consoleRef} />
-            </div>
-          </section>
+          <OutputPanel
+            consoleRef={consoleRef}
+            view={outputView}
+            onViewChange={setOutputView}
+            previewDoc={previewDoc}
+            previewMode={previewOf(language)?.mode ?? 'page'}
+            previewDirty={previewDirty}
+            onRefreshPreview={runCode}
+          />
         </main>
       </div>
 
@@ -955,7 +1043,7 @@ function App() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".js,.mjs,.cjs,.ts,.mts,.txt"
+        accept=".js,.mjs,.cjs,.ts,.mts,.txt,.html,.htm,.md,.markdown"
         className="hidden"
         onChange={handleFileChange}
       />

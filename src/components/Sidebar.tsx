@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { clamp, groupBy, map } from 'lodash-es'
+import { clamp } from 'lodash-es'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { FileIcon } from '@/components/FileIcon'
@@ -22,28 +22,19 @@ import { cn } from '@/lib/utils'
 import { startPointerDrag } from '@/lib/pointer-drag'
 import { isMac } from '@/lib/platform'
 import { MAX_ENTRIES_PER_DIR, languageOf, type Entry, type FileEntry } from '@/lib/fs-access'
-import { translate, useI18n, type T } from '@/i18n/context'
+import { translate, useI18n } from '@/i18n/context'
 import { parentOf, rootAsEntry, type Workspace, type WorkspaceRoot } from '@/hooks/useWorkspace'
 import type { Draft, FileDraft } from '@/hooks/useFileDraft'
 
 /*
-  左侧文件栏：上半是用户的本地目录（可以同时开多个，懒展开），下半是内置 Demo。
+  左侧文件栏：用户的本地目录（可以同时开多个，懒展开）。
+  原来这里还有内置 Demo 一段，已迁到顶栏的「资源」面板（ResourcesDialog）。
 
   宽度用手写的拖拽把手，没有引入 react-resizable-panels：整个界面只有这一条分隔线
   需要拖，而引入它意味着把编辑器/控制台那套本来没人抱怨的 flex 布局也一起改掉。
 */
 
 const WIDTH_KEY = 'scrawl:sidebarWidth'
-/**
- * Demo 那一段的展开状态。
- *
- * 键名从 `scrawl:templatesCollapsed` 换成了这个，不是为了好看：那一版的默认值是「展开」，
- * 而持久化的 effect 每次挂载都会写一遍，于是所有老用户本地都存着「展开」——
- * 沿用同一个键的话，「默认收起」这件事对他们永远不会生效。
- */
-const TEMPLATES_KEY = 'scrawl:templatesOpen'
-/** 上一版的键。语义正好相反，留在 localStorage 里只会让人读错，见一次清一次。 */
-const LEGACY_TEMPLATES_KEY = 'scrawl:templatesCollapsed'
 const MIN_WIDTH = 180
 const MAX_WIDTH = 480
 const DEFAULT_WIDTH = 264
@@ -81,67 +72,6 @@ const ICON_SLOT = 'flex shrink-0 items-center text-[var(--text-muted)] [&>[data-
 /** 箭头列：目录行放展开 / 收起箭头，文件行留空占位，让图标和名字在同一层里对齐 */
 const TWISTIE_SLOT =
   'flex size-3.5 shrink-0 items-center justify-center text-[var(--text-muted)] [&>[data-slot=icon]]:size-3.5'
-
-/**
- * 平滑推进的进度条。
- *
- * 底层的真实进度是异步一步步跳上来的（demo 文件都很小，每个文件通常只报一两次），
- * 直接拿来渲染会把 50% 一步弹到 70%。这里用 rAF 把「显示的百分比」以固定速度追向
- * 真实值，看起来就是下载管理器那种连续推进，而不是一格格跳。
- */
-function SmoothProgressBar({ value }: { value: number }) {
-  const [shown, setShown] = useState(0)
-  const shownRef = useRef(0)
-  // 每次 rAF 最多推进多少个百分点。太快不「平滑」，太慢会显得很拖。
-  const SPEED = 1.2
-
-  useEffect(() => {
-    let raf = 0
-    const tick = () => {
-      const cur = shownRef.current
-      if (Math.abs(value - cur) < 0.01) {
-        shownRef.current = value
-        setShown(value)
-        return
-      }
-      const next =
-        cur < value ? Math.min(cur + SPEED, value) : Math.max(cur - SPEED, value)
-      shownRef.current = next
-      setShown(next)
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [value])
-
-  return (
-    <>
-      <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--panel-hover)]">
-        <div className="h-full bg-[var(--primary)]/70" style={{ width: `${shown}%` }} />
-      </div>
-      <span className="shrink-0 text-[11px] tabular-nums text-[var(--text-faint)]">
-        {Math.round(shown)}%
-      </span>
-    </>
-  )
-}
-
-/**
- * 内置 Demo 按所在目录分组：路径提到分组标题上，条目里只留文件名。
- *
- * t 是传进来的而不是在函数里取的 —— 这是个纯函数，不是组件，钩子在这里用不了。
- */
-function groupTemplates(paths: readonly string[], t: T) {
-  const byDir = groupBy(paths, (path) => {
-    const rel = path.replace('../template/', '')
-    const slash = rel.lastIndexOf('/')
-    return slash === -1 ? t('sidebar.uncategorized') : rel.slice(0, slash)
-  })
-  return map(byDir, (items, dir) => ({
-    dir,
-    items: items.map((path) => ({ path, label: path.slice(path.lastIndexOf('/') + 1) })),
-  }))
-}
 
 function readWidth(): number {
   try {
@@ -273,22 +203,39 @@ function EntryMenu({
   children: React.ReactNode
 }) {
   const { t } = useI18n()
+  /*
+    菜单项的动作一律等菜单关完再执行 —— 同 RootRow 菜单的做法（那边有详细注释）：
+    Radix 的 FocusScope 要等退出动画播完才拆，在 onSelect 里当场插入的输入框，
+    autoFocus 抢到的焦点会被随后 Scope 的拆除甩回 <body>，用户得再点一次才能打字。
+  */
+  const afterCloseRef = useRef<(() => void) | null>(null)
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
       <ContextMenuContent
         className="min-w-[10rem]"
-        // 菜单关掉时不要把焦点还给那一行：重命名 / 新建会当场在树里插一个输入框，
-        // 焦点被抢回去等于触发输入框的失焦取消，这次操作就没了
-        onCloseAutoFocus={(e) => e.preventDefault()}
+        onCloseAutoFocus={(e) => {
+          e.preventDefault()
+          const fn = afterCloseRef.current
+          afterCloseRef.current = null
+          fn?.()
+        }}
       >
         {onCreate && (
           <>
-            <ContextMenuItem onSelect={() => onCreate('file')}>
+            <ContextMenuItem
+              onSelect={() => {
+                afterCloseRef.current = () => onCreate('file')
+              }}
+            >
               <Icon className="icon-[codicon--new-file]" />
               {t('menu.newFile')}
             </ContextMenuItem>
-            <ContextMenuItem onSelect={() => onCreate('directory')}>
+            <ContextMenuItem
+              onSelect={() => {
+                afterCloseRef.current = () => onCreate('directory')
+              }}
+            >
               <Icon className="icon-[codicon--new-folder]" />
               {t('menu.newDir')}
             </ContextMenuItem>
@@ -299,7 +246,11 @@ function EntryMenu({
           <Icon className="icon-[lucide--copy]" />
           {t('menu.copyPath')}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => onRename(entry)}>
+        <ContextMenuItem
+          onSelect={() => {
+            afterCloseRef.current = () => onRename(entry)
+          }}
+        >
           <Icon className="icon-[codicon--edit]" />
           {t('menu.rename')}
           {/* 快捷键：macOS 回车、其它平台 F2 */}
@@ -377,7 +328,7 @@ function DraftRow({ depth, draft, value }: { depth: number; draft: FileDraft; va
             else if (e.key === 'Escape') draft.cancel()
           }}
           // 失焦取消而不是提交：新建和改名都是有副作用的动作，点到别处顺手建出一个
-          // 「未命名.js」比丢掉几个字更烦人
+          // 「Untitled.js」比丢掉几个字更烦人
           onBlur={draft.cancel}
           className="min-w-0 flex-1 rounded-sm border border-[var(--primary)]/60 bg-[var(--panel-bg)] px-1 font-mono text-[13px] text-[var(--text-primary)] outline-none"
         />
@@ -763,31 +714,14 @@ function Tree({
 export interface SidebarProps {
   workspace: Workspace
   draft: FileDraft
-  /** 内置 Demo 的 glob 路径列表 */
-  templates: readonly string[]
   activeKey: string | null
   dirtyKeys: Set<string>
   /** 收起时整个面板不渲染；开关在顶栏上（HeaderBar），状态由 hooks/useSidebarCollapsed 管 */
   collapsed: boolean
-  onOpenTemplate: (path: string) => void
   onOpenLocalFile: (entry: FileEntry) => void
   /** 双击文件行时把焦点交给编辑器。单击只打开、焦点留在侧栏（同 VS Code），
       否则选中行刚亮起来焦点就跑了，回车 / F2 改名永远轮不到 */
   onFocusEditor: () => void
-  /** 「把全部 Demo 存到本地文件夹」。选文件夹、落盘、接管成根都在 App 那边 */
-  onSaveDemos: () => void
-  /** 写入进行中时点「取消」：停止写入并清理已写残留 */
-  onCancelSave: () => void
-  /** 是否正在执行取消（点了确认、在清理残留），用于把取消按钮置灰防重复 */
-  cancelling: boolean
-  /** 正在把 Demo 存到本地的写入进度（文件级 + 字节级）；null 表示当前没有正在进行的保存 */
-  saveProgress: {
-    file: string
-    doneFiles: number
-    totalFiles: number
-    writtenBytes: number
-    totalBytes: number
-  } | null
   /** 右键菜单里的两项。都只作用在树里的项上，根目录行不给（那一行的 × 是「关闭目录」） */
   onRenameEntry: (entry: Entry) => void
   onDeleteEntry: (entry: Entry) => void
@@ -800,17 +734,11 @@ export interface SidebarProps {
 export default function Sidebar({
   workspace,
   draft,
-  templates,
   activeKey,
   dirtyKeys,
   collapsed,
-  onOpenTemplate,
   onOpenLocalFile,
   onFocusEditor,
-  onSaveDemos,
-  onCancelSave,
-  cancelling,
-  saveProgress,
   onRenameEntry,
   onDeleteEntry,
   onCopyPath,
@@ -818,15 +746,6 @@ export default function Sidebar({
 }: SidebarProps) {
   const { t } = useI18n()
   const [width, setWidth] = useState(readWidth)
-  // Demo 这一段默认收起：它是「要用的时候才翻开」的东西，
-  // 首屏摊开一堆别人的文件名，会把上面真正在用的本地目录挤下去
-  const [templatesOpen, setTemplatesOpen] = useState(() => {
-    try {
-      return localStorage.getItem(TEMPLATES_KEY) === '1'
-    } catch {
-      return false
-    }
-  })
   const [refreshing, setRefreshing] = useState(false)
   /** 正在拖动侧栏宽度：拖动全程把手会整条加粗变亮（同 VS Code 拖分栏） */
   const [dragging, setDragging] = useState(false)
@@ -982,13 +901,8 @@ export default function Sidebar({
     if (revealedRef.current === activeKey) return
     revealedRef.current = activeKey
     if (!activeKey) return
-    if (activeKey.startsWith('builtin:')) {
-      // Demo 那一段默认是收起的，同样要先摊开才谈得上定位
-      setTemplatesOpen(true)
-      scrollRowIntoView(activeKey)
-      return
-    }
-    // 未命名文件不在树里，没有可定位的行
+    // builtin（Demo）文件住在顶栏的资源面板里，不在树里，没有可定位的行；
+    // 未命名文件同理
     if (!activeKey.startsWith('local:')) return
     // 各级父目录，从根往下：root、root/a、root/a/b
     const chain: string[] = []
@@ -1043,12 +957,10 @@ export default function Sidebar({
   useEffect(() => {
     try {
       localStorage.setItem(WIDTH_KEY, String(width))
-      localStorage.setItem(TEMPLATES_KEY, templatesOpen ? '1' : '0')
-      localStorage.removeItem(LEGACY_TEMPLATES_KEY)
     } catch {
       // 记不住就记不住
     }
-  }, [width, templatesOpen])
+  }, [width])
 
   // 转圈至少持续 REFRESH_SPIN_MS，否则「点了刷新」这件事用户根本看不见。
   // 期间再点直接忽略，免得转圈被下一次点击打断又重来。
@@ -1097,9 +1009,6 @@ export default function Sidebar({
   // 收起就整个不渲染，展开的开关在顶栏上
   if (collapsed) return null
 
-  const groups = groupTemplates(templates, t)
-  // 收起后 Demo 里的未保存改动就看不见了，在标题上留一个点顶上
-  const templatesDirty = [...dirtyKeys].some((key) => key.startsWith('builtin:'))
   // 新建按钮的 title 要说清「建到哪」，否则用户看不出目标是哪个目录。
   // 多根之后路径里带的是内部 id，得先换成目录名。
   const targetLabel = workspace.displayPath(workspace.target)
@@ -1208,14 +1117,7 @@ export default function Sidebar({
                 按钮改名时这段说明跟着变，不会脱节 */}
             {t('sidebar.unsupported', { label: t('header.import') })}
           </p>
-        ) : workspace.roots.length === 0 ? (
-          <div className="px-2 pb-2 pt-2">
-            <Button variant="secondary" size="sm" onClick={() => void workspace.pick()}>
-              <Icon className="icon-[codicon--folder-opened]" />
-              {t('sidebar.openFolder')}
-            </Button>
-          </div>
-        ) : (
+        ) : workspace.roots.length === 0 ? null : (
           <div role="tree" aria-label={t('sidebar.localDirs')}>
             {workspace.roots.map((root) => (
               <div key={root.id}>
@@ -1256,49 +1158,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {saveProgress && (
-          <div className="mx-2 mb-2 mt-2 flex flex-col gap-1.5 rounded-md border border-[var(--border)] bg-[var(--panel-bg)] px-2 py-1.5">
-            <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 truncate text-[12px] leading-snug text-[var(--text-faint)]">
-                {saveProgress.file
-                  ? t('sidebar.savingDemosFile', {
-                      name: saveProgress.file.slice(saveProgress.file.lastIndexOf('/') + 1),
-                      done: saveProgress.doneFiles,
-                      total: saveProgress.totalFiles,
-                    })
-                  : t('sidebar.savingDemos', {
-                      done: saveProgress.doneFiles,
-                      total: saveProgress.totalFiles,
-                    })}
-              </span>
-              <button
-                type="button"
-                onClick={onCancelSave}
-                disabled={cancelling}
-                title={cancelling ? t('sidebar.cancellingSave') : t('sidebar.cancelSave')}
-                aria-label={cancelling ? t('sidebar.cancellingSave') : t('sidebar.cancelSave')}
-                className="flex shrink-0 items-center gap-0.5 text-[var(--text-muted)] hover:text-[var(--text-body)] disabled:pointer-events-none disabled:opacity-60"
-              >
-                <Icon
-                  className={`size-3.5 ${cancelling ? 'icon-[lucide--loader-circle] animate-spin' : 'icon-[lucide--x]'}`}
-                />
-                {cancelling && (
-                  <span className="text-[11px] text-[var(--text-faint)]">{t('sidebar.cancellingSave')}</span>
-                )}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <SmoothProgressBar
-                value={
-                  saveProgress.totalBytes > 0
-                    ? (saveProgress.writtenBytes / saveProgress.totalBytes) * 100
-                    : 0
-                }
-              />
-            </div>
-          </div>
-        )}
-        {workspace.busy && !saveProgress && (
+        {workspace.busy && (
           <p className="px-2 py-1 text-[12px] text-[var(--text-faint)]">{t('sidebar.loading')}</p>
         )}
 
@@ -1317,82 +1177,8 @@ export default function Sidebar({
             </button>
           </div>
         )}
+        </div>
 
-        {/* ---- Demo 片段 ---- */}
-        <div className="mt-3 flex items-center gap-0.5 pb-1 pe-2">
-          <button
-            type="button"
-            onClick={() => setTemplatesOpen((open) => !open)}
-            aria-expanded={templatesOpen}
-            className="flex min-w-0 flex-1 items-center gap-1 px-2 text-start text-[11px] tracking-wide text-[var(--text-faint)] hover:text-[var(--text-body)]"
-          >
-            {/* 和 ICON_SLOT 同一个道理，只是这里的图标更小、颜色跟着标题走 */}
-            <span className="flex shrink-0 items-center [&>[data-slot=icon]]:size-3">
-              {templatesOpen ? (
-                <Icon className="icon-[lucide--chevron-down]" />
-              ) : (
-                <Icon className="icon-[lucide--chevron-right] rtl:rotate-180" />
-              )}
-            </span>
-            {t('sidebar.demos')}
-            {!templatesOpen && templatesDirty && (
-              <span
-                aria-label={t('sidebar.demosDirty')}
-                className="ms-auto size-1.5 shrink-0 rounded-full bg-[var(--accent-symbol)]"
-              />
-            )}
-          </button>
-          {/* 这些 Demo 打开后改得动，但存不回去（它们是打包进来的字符串，不是磁盘上的文件）。
-              存到本地文件夹之后就是普通的本地文件了，改完 Ctrl+S 直接写回 —— 所以这个
-              按钮才是「真的要用它们」的入口，不支持目录 API 的浏览器上没有意义，直接不显示 */}
-          {workspace.supported && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              title={t('sidebar.saveDemos')}
-              aria-label={t('sidebar.saveDemos')}
-              className="text-[var(--text-muted)]"
-              onClick={onSaveDemos}
-              // 正在写入时禁用：重复触发会并发写、弹多个确认框、生成重复目录
-              disabled={saveProgress !== null}
-            >
-              <Icon className="icon-[codicon--desktop-download] size-3.5" />
-            </Button>
-          )}
-        </div>
-        {templatesOpen &&
-          groups.map(({ dir, items }) => (
-            <div key={dir}>
-              {/* 分组名和「Demo 片段」四个字对齐（越过标题上那个 12px 箭头和 4px 间距）：
-                  它们是这一段的子目录，不能比根的文字还靠左 */}
-              <div className="py-0.5 pe-2 ps-6 font-mono text-[12px] text-[var(--text-muted)]">{dir}</div>
-              <ul>
-                {items.map((item) => {
-                  const key = `builtin:${item.path}`
-                  return (
-                    <li key={item.path}>
-                      <Row
-                        depth={1}
-                        data-row-key={key}
-                        label={item.label}
-                        selected={selectedId === key}
-                        dirty={dirtyKeys.has(key)}
-                        icon={
-                          <FileIcon kind="file" name={item.path.slice(item.path.lastIndexOf('/') + 1)} />
-                        }
-                        onClick={() => {
-                          onOpenTemplate(item.path)
-                          setSelectedId(key)
-                        }}
-                        onDoubleClick={onFocusEditor}
-                      />
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          ))}
-        </div>
         {/* 竖向悬浮进度条：贴容器右缘、方形直角、不占宽度，悬停列表才浮现（同 VS Code）。
             浮现后可按住 thumb 上下拖拽滚动（同 VS Code）—— 平时整条 pointer-events-none 不挡
             行点击，列表 hover 时才把命中交给这一列的拖拽条 */}
