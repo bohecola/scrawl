@@ -93,10 +93,11 @@ export function StatusBar({ active, cursor, language, displayPath, message }: St
           <span
             className="shrink-0"
             title={
-              language === 'typescript' ? t('statusbar.ts') : t('statusbar.js')
+              language === 'typescript' ? t('statusbar.ts') : language === 'javascript' ? t('statusbar.js') : language
             }
           >
-            {language === 'typescript' ? 'TypeScript' : 'JavaScript'}
+            {/* 语言标签只有 JS/TS 有现成文案；其余语言（html / css / json…）直接显示 id */}
+            {language === 'typescript' ? 'TypeScript' : language === 'javascript' ? 'JavaScript' : language}
           </span>
         </>
       )}

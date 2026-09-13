@@ -71,6 +71,14 @@ export class CodeRunner {
     for (const listener of this.listeners) listener(batch, dropped)
   }
 
+  /*
+    预览面板的页面日志也走这条分发管线：Console 只订阅一次就能同时收到
+    worker 和 iframe 页面的输出。batch 由 PreviewPanel 组好（含 timestamp）。
+  */
+  emitPage(batch: RawConsoleMessage[]): void {
+    this.emit(batch)
+  }
+
   /**
    * 创建并启动一次运行。重复调用会先终止上一次。key 是编辑器里 model 的 key（TS 编译要用）。
    * host：入口是本地目录里的文件时由 App 提供，用于解析相对 import；其余传 null。

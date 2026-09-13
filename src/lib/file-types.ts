@@ -39,6 +39,29 @@ export function isRunnable(language: string): boolean {
   return language === 'javascript' || language === 'typescript'
 }
 
+/** 一种语言的预览规格。mode 区分沙箱策略与刷新模型（详见 PreviewPanel）；auto = 防抖自动刷新。 */
+export interface PreviewSpec {
+  mode: 'page' | 'document'
+  auto: boolean
+}
+
+/**
+ * 该语言能不能预览、按什么模式预览。
+ * html 走 page 模式：iframe 里跑真正的页面，刷新跟「运行」模型（手动触发）；
+ * markdown 走 document 模式：排版外壳是我们的、跟着应用主题走，编辑即防抖刷新（文档不是程序）。
+ */
+export function previewOf(language: string): PreviewSpec | null {
+  if (language === 'html') return { mode: 'page', auto: false }
+  if (language === 'markdown') return { mode: 'document', auto: true }
+  return null
+}
+
+/** 运行按钮对哪些语言可用：JS/TS 进 worker，HTML 进预览（runCode 按语言分流）。
+ *  document 模式不算——它是自动刷新的文档，没有「运行」语义，按钮不该亮。 */
+export function isExecutable(language: string): boolean {
+  return isRunnable(language) || previewOf(language)?.mode === 'page'
+}
+
 export function extOf(name: string): string {
   const dot = name.lastIndexOf('.')
   // 「.gitignore」这类以点开头、没有真正后缀的文件，整个名字当后缀看
