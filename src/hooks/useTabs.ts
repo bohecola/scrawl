@@ -11,8 +11,6 @@ interface UseTabsOptions {
   editorRef: RefObject<EditorHandle | null>
   confirm: Confirm
   t: T
-  /** 最后一个标签也关掉之后调用：App 用它开一份新的未命名文件 */
-  onEmpty: () => void
   /** 一批标签真的关掉了（确认过、model 已 close）。App 用它清掉未命名文件的持久化记录 */
   onClosed?: (keys: string[]) => void
   /**
@@ -38,7 +36,7 @@ interface UseTabsOptions {
   active / dirtyKeys 各同步一份到 ref 供回调用。写 ref 放在 effect 里而不是渲染中：
   渲染阶段写 ref 会被 react-hooks 规则拦下，而这些 ref 只有用户交互时才读，晚一个 commit 也没关系。
 */
-export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canSave }: UseTabsOptions) {
+export function useTabs({ editorRef, confirm, t, onClosed, onSave, canSave }: UseTabsOptions) {
   const [tabs, setTabs] = useState<ActiveFile[]>([])
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const active = tabs.find((x) => x.key === activeKey) ?? null
@@ -57,14 +55,11 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
     dirtyRef.current = dirtyKeys
   }, [dirtyKeys])
 
-  // onEmpty 走 ref：App 那边它依赖 openUntitled，而 openUntitled 又依赖这里的 openOrActivate，
-  // 直接放进依赖数组会绕成环
-  const onEmptyRef = useRef(onEmpty)
+  // onClosed 等走 ref：App 那边它们依赖后定义的回调，直接放进依赖数组会绕成环
   const onClosedRef = useRef(onClosed)
   const onSaveRef = useRef(onSave)
   const canSaveRef = useRef(canSave)
   useEffect(() => {
-    onEmptyRef.current = onEmpty
     onClosedRef.current = onClosed
     onSaveRef.current = onSave
     canSaveRef.current = canSave
@@ -110,7 +105,7 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
 
   // 关闭某标签（供标签栏 × 用）。脏的且能保存，问「保存 / 不保存 / 取消」（同 VS Code）；
   // 脏的但保存无处可去，问「关闭？确认 / 取消」。关闭激活标签则切到相邻标签；
-  // 关到最后一个就调 onEmpty（App 用它开一份新的未命名文件，与删除当前文件后一致）。
+  // 关到最后一个就落在零标签的欢迎页上（不再自动开新的未命名文件）。
   // 注意读的都是 live ref / 本处可拿到的稳定量 —— 关闭确认可能跨 await，不能吃旧 state。
   const closeTab = useCallback(
     async (key: string) => {
@@ -146,8 +141,8 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
       setTabs(next)
       if (activeKeyLiveRef.current === key) {
         if (next.length === 0) {
+          // 零标签是合法状态：welcome 页接管，不再自动开新的未命名文件
           setActiveKey(null)
-          onEmptyRef.current() // 全关完 → 由调用方决定落脚点
         } else {
           // 优先右边邻居，到头了用左边
           const pick = next[Math.min(idx, next.length - 1)] ?? next[next.length - 1]
@@ -160,7 +155,7 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
   )
 
   // 从标签里移除一批 key（目录删除 / 移除根目录时用），并从 tabs / activeKey 里同步清掉。
-  // 返回「被移除的标签里是否包含当前激活的」，调用方据此决定要不要开一份新的未命名文件兜底。
+  // 返回「被移除的标签里是否包含当前激活的」（调用方需要知道界面是否切到了空状态）。
   const dropTabsByKeys = useCallback((keys: string[]) => {
     const kset = new Set(keys)
     const cur = activeKeyLiveRef.current
@@ -183,7 +178,7 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
   // 就先问一次带过整批：脏的全是本地文件时给「全部保存 / 不保存 / 取消」，
   // 否则（有未命名的得逐个起名，批量存不了；内置 / 导入的存了也只是下载）问「关闭？确认 / 取消」；
   // 然后逐个 editor.close 并从 tabs 里移除；若删掉了当前激活的，
-  // 就在剩余里选一个激活（优先 prefer，其次最左），一个不剩就调 onEmpty。
+  // 就在剩余里选一个激活（优先 prefer，其次最左），一个不剩就落在欢迎页上。
   const closeMany = useCallback(
     async (keysToClose: string[], prefer?: string) => {
       const curTabs = tabsLiveRef.current
@@ -228,8 +223,8 @@ export function useTabs({ editorRef, confirm, t, onEmpty, onClosed, onSave, canS
       const curActive = activeKeyLiveRef.current
       if (curActive && kset.has(curActive)) {
         if (remaining.length === 0) {
+          // 零标签是合法状态：welcome 页接管
           setActiveKey(null)
-          onEmptyRef.current()
         } else {
           const pick = remaining.find((x) => x.key === prefer) ?? remaining[0]
           setActiveKey(pick.key)
