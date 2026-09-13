@@ -26,8 +26,10 @@
 */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, basename, extname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const ROOT = new URL('..', import.meta.url).pathname
+// Windows 下 URL 的 pathname 是「/C:/...」，交给 path.join 会拼出「C:\C:\...」，必须走 fileURLToPath
+const ROOT = fileURLToPath(new URL('..', import.meta.url))
 const LOCALES = join(ROOT, 'src', 'locales')
 
 // 所有 CLDR 复数类别 + 本项目用到的上下文后缀（fs-access.ts 里 kind 的取值）
