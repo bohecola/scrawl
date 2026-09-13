@@ -4,13 +4,13 @@
 // 编辑器现在也用来打开用户本地磁盘上的文件，而「加载时改内容」在那条路上是灾难 ——
 // Ctrl+S 会把被改过的内容原样写回磁盘。运行前的 export 剥离已经由 compileToJs 承担，
 // 对内置 Demo 和本地文件一视同仁，这里只负责把原文交出去。
-const modules = import.meta.glob('../template/**/*.js', {
+const modules = import.meta.glob('../resources/**/*.{js,html,css,md}', {
   query: '?raw',
   import: 'default',
 }) as Record<string, () => Promise<string>>
 
-/** glob 的 key 带着这个前缀（`../template/overrides/call.js`）。 */
-const PREFIX = '../template/'
+/** glob 的 key 带着这个前缀（`../resources/demos/overrides/call.js`）。 */
+const PREFIX = '../resources/'
 
 export async function loadTemplate(path: string): Promise<string> {
   const loader = modules[path]

@@ -3,6 +3,7 @@ import { Icon } from '@/components/ui/icon'
 import { GithubMark } from './GithubMark'
 import { ScrawlMark } from './ScrawlMark'
 import { SettingsDialog } from './SettingsDialog'
+import { ResourcesDialog, type ResourcesDialogProps } from './ResourcesDialog'
 import { useI18n } from '@/i18n/context'
 import { cn } from '@/lib/utils'
 
@@ -13,10 +14,12 @@ interface HeaderBarProps {
   /** 不支持目录 API 的浏览器上才显示「导入」按钮 */
   showImport: boolean
   onImport: () => void
+  /** 资源面板（Demo / 以后的算法、面试题…）需要的回调与状态，原样透传给 ResourcesDialog */
+  resources: ResourcesDialogProps
 }
 
-/** 顶栏：侧栏开关、品牌、（可选的）导入、设置面板、GitHub 链接。 */
-export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImport }: HeaderBarProps) {
+/** 顶栏：侧栏开关、品牌、（可选的）导入、资源面板、设置面板、GitHub 链接。 */
+export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImport, resources }: HeaderBarProps) {
   const { t } = useI18n()
   return (
     <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--panel-bg)] px-3 py-3">
@@ -57,6 +60,8 @@ export function HeaderBar({ sidebarCollapsed, onToggleSidebar, showImport, onImp
       )}
 
       <div className="ms-auto flex items-center gap-2">
+        {/* 内置内容（Demo / 以后的算法、面试题…）收进「资源」面板，见 ResourcesDialog */}
+        <ResourcesDialog {...resources} />
         {/* 语言 / 配色 / 明暗 / 编辑器选项全部收进一个「设置」面板，见 SettingsDialog */}
         <SettingsDialog />
 
