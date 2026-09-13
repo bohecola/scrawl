@@ -5,7 +5,7 @@ import { idbGet, idbSet } from '@/lib/idb'
 /*
   未命名文件（VS Code 的 Untitled-N）的编号与持久化。
 
-  编号：取当前没被占用的最小正整数，关掉「未命名-2」再新建还是「未命名-2」。
+  编号：取当前没被占用的最小正整数，关掉「Untitled-2」再新建还是「Untitled-2」。
   分配是同步的、只看内存里这份表，所以连按新建不会撞号。
 
   持久化：整张表存成 IndexedDB 里的一条（key `untitled`），内容变了就防抖重写。

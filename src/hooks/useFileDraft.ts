@@ -60,10 +60,7 @@ export interface FileDraft {
    * 根目录行的菜单要显式传 —— 它刚调过 select()，而那是个异步的 state 更新，
    * 同一个 tick 里 workspace.target 读到的还是上一个目录。
    */
-  start: (
-    kind: DraftKind,
-    opts?: { defaultName?: string; content?: string; parentPath?: string }
-  ) => void
+  start: (kind: DraftKind, opts?: { content?: string; parentPath?: string }) => void
   /** 改名：输入框就地替换掉树里的那一行，默认值是原名 */
   startRename: (entry: Entry) => void
   setName: (name: string) => void
@@ -79,26 +76,12 @@ interface Callbacks {
   onNotice: (notice: { tone: 'info' | 'warn' | 'error'; text: string }) => void
 }
 
-/**
- * 新建文件预填的名字。固定 ASCII，不跟界面语言走。
- *
- * 它和界面上别的文案不是一回事 —— 这个字符串会原样变成磁盘上的文件名。
- * 跟着语言翻译的话，同一个人换个界面语言就会在同一个目录里留下
- * `未命名.js` / `Untitled.js` / `بدون عنوان.js` 好几份，而文件名不像界面文案，
- * 它要被 import、被路径引用、被 git 记住。这里的一致性比「界面语言下的自然感」重要。
- *
- * 小写而不是 Untitled.js：新建的输入框里已经选中了 `untitled` 那一段，
- * 用户多半直接敲掉它，真正留下这个名字的场景是「直接回车」，那时小写更像临时文件。
- */
-const NEW_FILE_NAME = 'untitled.js'
-
 /*
-  新建时预填的名字。目录名仍跟界面语言走：它没有后缀、也不会被 import，
-  中文界面下建出来叫「新建文件夹」比 untitled-folder 好认。
+  新建时预填的名字：文件留空（同 VS Code 资源管理器）——建什么类型由用户敲的名字决定，
+  引导交给输入框的占位提示；目录保留默认名「新建文件夹」。
   写成函数是因为 t 只有在组件里才拿得到。
 */
-const defaultName = (kind: DraftKind, t: T): string =>
-  kind === 'file' ? NEW_FILE_NAME : t('file.newDir')
+const defaultName = (kind: DraftKind, t: T): string => (kind === 'file' ? '' : t('file.newDir'))
 
 export function useFileDraft(
   workspace: Workspace,
@@ -132,7 +115,7 @@ export function useFileDraft(
       parentPath,
       kind,
       target: null,
-      name: opts.defaultName ?? defaultName(kind, t),
+      name: defaultName(kind, t),
       error: null,
       content: opts.content,
     })
