@@ -222,7 +222,7 @@ export function TabStrip({
                 onClick={() => onClose(tab.key)}
                 className={cn(
                   // 20px 正方形、圆角略大、四周留白，hover 底色不贴着 tab 的顶线 / 底边 / 右侧分隔线
-                  'my-auto me-1 flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] transition-opacity hover:bg-[var(--panel-hover)] hover:text-[var(--text-body)]',
+                  'my-auto me-1 flex size-5 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] transition-opacity hover:bg-[var(--tab-btn-hover)] hover:text-[var(--text-body)]',
                   isActive
                     ? 'opacity-100'
                     : 'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100'
@@ -262,7 +262,7 @@ export function TabStrip({
         onClick={onNew}
         title={`${t('tab.new')} (${shortcut.newFile})`}
         aria-label={t('tab.new')}
-        className="my-auto ms-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--panel-hover)] hover:text-[var(--text-body)]"
+        className="my-auto ms-1 flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--text-faint)] hover:bg-[var(--tab-btn-hover)] hover:text-[var(--text-body)]"
       >
         <Icon className="icon-[lucide--plus] size-4" />
       </button>

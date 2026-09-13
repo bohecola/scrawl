@@ -101,6 +101,9 @@ html {
   --tab-inactive-bg: var(--app-bg);
   /* 标签栏本身（含右侧空白与运行按钮区）与非激活 tab 同色，激活 tab 才「浮」到编辑器色上 */
   --tab-bar-bg: var(--app-bg);
+  /* 标签栏小图标按钮（× / +）的 hover 底色：深色下激活 tab 是 --panel-bg，
+     普通 hover 色就有对比，直接复用 */
+  --tab-btn-hover: var(--panel-hover);
 
   /* 边框 / 分割线 */
   --border: #2b2b2b;
@@ -175,6 +178,9 @@ html {
   --tab-active-bg: var(--panel-hover);
   --tab-inactive-bg: #f8fafc;
   --tab-bar-bg: #f8fafc;
+  /* 标签栏小图标按钮（× / +）的 hover 底色：激活 tab 本身就是 --panel-hover(slate-200)，
+     同色 hover 会看不见，要再深一档（slate-300） */
+  --tab-btn-hover: #cbd5e1;
 
   --border: #cbd5e1;     /* slate-300 */
   --border-strong: #94a3b8; /* slate-400 */
