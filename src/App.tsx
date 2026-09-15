@@ -39,11 +39,13 @@ import type { OutputView } from './hooks/useOutputLayout'
 import OutputPanel from './components/OutputPanel'
 import { debounce } from 'lodash-es'
 import type { ModuleHost } from './lib/module-graph'
+import { candidates, isRunnablePath } from './lib/module-resolve'
 import { startPointerDrag } from './lib/pointer-drag'
 import { shortcut, isRtl } from './lib/platform'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useSidebarCollapsed } from './hooks/useSidebarCollapsed'
 import { messageOf, useI18n } from '@/i18n/context'
+import type { IRange } from 'monaco-editor'
 
 // 编辑器 / Console 分栏
 const CONSOLE_MIN = 220 // px，任何一侧至少保住的宽度
@@ -349,6 +351,70 @@ function App() {
       }
     },
     [setNotice, t, openOrActivate]
+  )
+
+  /**
+   * 跳定义（F12 / Cmd+Click）落到本地目录里的另一个文件：
+   * 把它按 openLocalFile 那条路开成标签，再把光标放到定义处。
+   *
+   * 目标路径是 TS 语言服务回给我们的，未必和磁盘上的文件名一模一样 ——
+   * project-index 在 TS worker 里把 a.js 登记成 a.ts（那边没开 allowJs），
+   * 所以从 TS 文件跳到 './a.js' 时拿回来的是 a.ts。候选顺序统一走 lib/module-resolve，
+   * 和运行时解析 import 用的是同一份规则，免得出现「跑得起来却跳不过去」。
+   *
+   * 已经打开成 model 的优先直接用（不读盘、保住未保存的改动）；
+   * 都命中不了就返 false，让 Monaco 自己处理（在内置的只读 model 里打开）。
+   *
+   * 候选里第一个永远是语言服务报回来的原始路径。它未必是可运行后缀（`.jsx` / `.css` …），
+   * 这种文件和运行时 resolveSpecifier 的处置保持一致：运行时对「存在但类型不支持」的候选
+   * 抛 unsupportedType，这里就不能反过来把它打开 —— isRunnablePath 是两边共用的判据。
+   */
+  const openDefinition = useCallback(
+    async (key: string, selection?: IRange): Promise<boolean> => {
+      const path = localPathOf(key)
+      let targetPath: string | null = null
+      let handle: FileSystemFileHandle | null = null
+      // 已经打开的 model 优先：可能带着未保存的改动，而且省一次读盘
+      for (const candidate of candidates(path)) {
+        if (editorRef.current?.has(`local:${candidate}`)) {
+          targetPath = candidate
+          handle = localMetaRef.current.get(`local:${candidate}`)?.handle ?? null
+          break
+        }
+      }
+      // 还没打开：按候选顺序逐个探测磁盘，第一个存在的就是它
+      if (!targetPath) {
+        for (const candidate of candidates(path)) {
+          const found = await resolveFilePath(candidate)
+          if (found) {
+            targetPath = candidate
+            handle = found
+            break
+          }
+        }
+      }
+      if (!targetPath || !handle) return false
+      // 命中了一个运行时不认的文件（后缀不在 RUNNABLE_EXT）：不打开，也不交回 Monaco
+      // 让它开只读 model —— 语言服务不会指向这种文件，走到这里说明候选已探到磁盘边缘，
+      // 弹一句提示、原地不动比跳进一个只读视图更不误导。返 true 表示「我处理过了」。
+      if (!isRunnablePath(targetPath)) {
+        const name = targetPath.slice(targetPath.lastIndexOf('/') + 1)
+        setNotice({ tone: 'warn', text: t('notice.notTextFile', { name }) })
+        return true
+      }
+
+      const targetKey = `local:${targetPath}`
+      const name = targetPath.slice(targetPath.lastIndexOf('/') + 1)
+      // preserveFocus：光标位置由下面的 revealRange 统一给，别让 openLocalFile 先聚焦再跳
+      await openLocalFile({ kind: 'file', path: targetPath, name, handle }, { preserveFocus: true })
+      // 没开成（比如后缀不在 LANGUAGE_BY_EXT 里，openLocalFile 已弹过提示）就到此为止。
+      // 返 true：已经给过反馈了，不能让 Monaco 再开一个只读 model 把提示覆盖掉。
+      if (!editorRef.current?.has(targetKey)) return true
+      if (selection) editorRef.current?.revealRange(targetKey, selection)
+      editorRef.current?.focus()
+      return true
+    },
+    [openLocalFile, resolveFilePath, setNotice, t]
   )
 
   /**
@@ -977,6 +1043,7 @@ function App() {
                   if (key === active?.key && previewOf(language)?.mode === 'document') renderDocRef.current?.(key, value)
                 }}
                 onSave={handleSave}
+                onOpenDefinition={openDefinition}
                 onCursorStatus={setCursor}
               />
             </div>

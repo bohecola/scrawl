@@ -5,6 +5,9 @@
 
   路径约定同 workspace：`<rootId>/<相对根目录的路径>`，编辑器里对应的 model key 是 `local:<path>`。
   这里不碰 React / workspace，需要的能力由 App 打包成 ModuleHost 传进来。
+
+  「specifier 可能对应哪个文件」（补后缀、目录 index、.js↔.ts 别名）统一在 lib/module-resolve.ts，
+  跳定义那条路也读同一份规则 —— 两边不能有分歧，否则会出现「跑得起来却跳不过去」。
 */
 
 import { uniq } from 'lodash-es'
@@ -13,6 +16,7 @@ import { AppError } from './app-error'
 import { compileModule } from './compile'
 import { extOf } from './file-types'
 import { findModuleSpecifiers, rewriteSpecifiers } from './imports'
+import { candidates, isRunnablePath, joinPath } from './module-resolve'
 
 export interface ModuleSource {
   code: string
@@ -41,8 +45,6 @@ export interface ModuleGraphResult {
 /** 模块数上限：防止误导入 node_modules 之类的目录把浏览器撑爆 */
 export const MAX_MODULES = 200
 
-const RUNNABLE_EXT = new Set(['js', 'mjs', 'ts', 'mts'])
-
 function languageOfPath(path: string): string {
   const ext = extOf(path.slice(path.lastIndexOf('/') + 1))
   return ext === 'ts' || ext === 'mts' ? 'typescript' : 'javascript'
@@ -50,42 +52,6 @@ function languageOfPath(path: string): string {
 
 function isRelative(spec: string): boolean {
   return spec.startsWith('./') || spec.startsWith('../')
-}
-
-/**
- * 以 fromPath 所在目录为基准拼接 spec，做 `.` / `..` 规范化。
- * 返回 null 表示越出了根目录（把 rootId 那一段都 pop 掉了）。
- */
-function joinPath(fromPath: string, spec: string): string | null {
-  const base = fromPath.split('/').slice(0, -1) // 去掉文件名
-  const rootId = base[0]
-  const out = [...base]
-  for (const seg of spec.split('/')) {
-    if (seg === '' || seg === '.') continue
-    if (seg === '..') {
-      out.pop()
-      // rootId 是第一段，pop 到它没了就是越界
-      if (out.length === 0) return null
-      continue
-    }
-    out.push(seg)
-  }
-  if (out[0] !== rootId || out.length < 2) return null
-  return out.join('/')
-}
-
-/** 省略后缀 / 写了 .js 实为 .ts 的候选，按探测顺序 */
-function candidates(path: string): string[] {
-  const name = path.slice(path.lastIndexOf('/') + 1)
-  const ext = extOf(name)
-  const list = [path]
-  if (!name.includes('.') || !RUNNABLE_EXT.has(ext)) {
-    // 没有后缀（或后缀不像可运行文件，比如 ./utils.v2）：补后缀、找目录 index
-    list.push(`${path}.ts`, `${path}.js`, `${path}.mts`, `${path}.mjs`, `${path}/index.ts`, `${path}/index.js`)
-  }
-  if (ext === 'js') list.push(path.slice(0, -3) + '.ts')
-  if (ext === 'mjs') list.push(path.slice(0, -4) + '.mts')
-  return uniq(list)
 }
 
 async function resolveSpecifier(fromPath: string, spec: string, host: ModuleHost): Promise<string> {
@@ -97,8 +63,7 @@ async function resolveSpecifier(fromPath: string, spec: string, host: ModuleHost
   const tried = candidates(joined)
   for (const path of tried) {
     if (!(await host.exists(path))) continue
-    const ext = extOf(path.slice(path.lastIndexOf('/') + 1))
-    if (!RUNNABLE_EXT.has(ext)) throw new AppError('err.imports.unsupportedType', { spec, from })
+    if (!isRunnablePath(path)) throw new AppError('err.imports.unsupportedType', { spec, from })
     return path
   }
   throw new AppError('err.imports.notFound', {

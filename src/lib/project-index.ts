@@ -11,15 +11,22 @@
   语言服务，文件名用和编辑器 model 一模一样的 URI（modelUri）。tsWorker 取内容时 model 优先、
   extraLib 兜底，于是「打开着的文件以缓冲区为准、没打开的用磁盘内容」自然成立。
 
-  JS 和 TS 是两个独立的 worker（workerManager 只把同语言的 model 同步给各自的 worker）：
-  - javascript 那个 worker 默认开了 allowJs，.ts / .js 两种都能按真实文件名登记；
-  - typescript 那个没开 allowJs，而且不能开：monaco 的 getScriptKind 对 .mts 这类后缀按
-    「allowJs ? JS : TS」判定，一开 .mts 文件就会被当 JS 解析、类型标注全成语法错误，
-    compile.ts 里按语法诊断拦运行也会跟着误伤。所以 .js 文件在 TS worker 里改用
-    「.js → .ts」的别名登记（moduleResolution: Bundler 下 `./a.js` / `./a` 都会先找 a.ts）。
-    JS 代码按 TS 解析，除了 JSDoc 类型不生效外，推断出来的签名是一样的。
-    同名的 a.ts 真实存在时别名让位，和运行时 candidates() 的探测顺序（.js 优先）略有出入，
-    这种同名并存的情况本身就该避免。
+  JS 和 TS 是两个独立的 worker（workerManager 只把同语言的 model 同步给各自的 worker），
+  两边都用磁盘上的真名登记。为什么 .js 不再造一个 .ts 别名 —— monaco 的 getScriptKind 是
+  写死的：
+
+      case "ts":  return ScriptKind.TS      // 与 allowJs 无关
+      case "js":  return ScriptKind.JS      // 与 allowJs 无关
+      default:    return allowJs ? JS : TS  // 只有 .mts / .mjs / .cts 落这里
+
+  所以「.js 按 JS 解析」是白拿的，跟 allowJs 没关系；真名下 JSDoc 的 @param / @returns 才被
+  当类型用（别名成 .ts 就只是被忽略的注释，`len(123)` 这种真错误会漏报）。
+  反过来 typescript worker 的 allowJs 一定不能开：开了只有 default 分支会变，.mts 文件被当 JS
+  解析、类型标注全成语法错误，compile.ts 里按语法诊断拦运行也会跟着误伤。
+
+  代价：.js 里写 TS 类型标注会有波浪线（Type annotations can only be used in TypeScript files）。
+  运行时不受影响 —— compile.ts 只对 language === 'typescript' 走 emitJs，.js 原样返回。
+  另外 javascriptDefaults 默认 noSemanticValidation: true，语义诊断本来就不显示。
 
   编辑器里的改动通过 setContent 推进来（App 在 Editor 的 onChange 里调）：同语言 worker
   用不上（model 优先），但另一个语言的 worker 只能靠它看到未保存的内容。
@@ -99,15 +106,12 @@ export function createProjectIndex(): ProjectIndex {
   const publish = () => {
     const desired = { typescript: new Map<string, string>(), javascript: new Map<string, string>() }
     for (const [path, file] of files) {
+      // 一律按磁盘上的真名登记，两个 worker 都是。别再给 .js 造 .ts 别名：
+      // getScriptKind 对 .ts/.js 是写死的（只有 .mts 这类才看 allowJs），所以真名 .js 天然
+      // 按 JS 解析，JSDoc 的 @param/@returns 才当类型用 —— 别名成 .ts 会把它变成被忽略的注释，
+      // 于是 len(123) 这种真错误就漏报了。详见文件头。
+      desired.typescript.set(libNameOf(path), file.content)
       desired.javascript.set(libNameOf(path), file.content)
-      const ext = extOf(nameOf(path))
-      if (ext === 'ts' || ext === 'mts') {
-        desired.typescript.set(libNameOf(path), file.content)
-      } else {
-        // .js → .ts、.mjs → .mts 的别名，见文件头。真有同名 .ts 时别名让位
-        const alias = `${path.slice(0, -ext.length)}${ext === 'js' ? 'ts' : 'mts'}`
-        if (!files.has(alias)) desired.typescript.set(libNameOf(alias), file.content)
-      }
     }
 
     for (const lang of ['typescript', 'javascript'] as const) {

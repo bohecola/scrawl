@@ -1,6 +1,6 @@
 import { useRef, useEffect, useImperativeHandle, forwardRef, useMemo } from 'react'
-import { monaco, modelUri } from '@/monaco/setup'
-import type { editor as MonacoEditorType, IDisposable } from 'monaco-editor'
+import { monaco, modelUri, keyOfUri } from '@/monaco/setup'
+import type { editor as MonacoEditorType, IDisposable, IRange } from 'monaco-editor'
 import { debounce, sortBy } from 'lodash-es'
 import { useTheme } from '@/theme/index'
 import { useSettings, fontFamilyOf, type EditorSettings } from '@/settings/context'
@@ -79,6 +79,12 @@ export interface EditorHandle {
    * 和 close 一样不为旧 key 发 onDirtyChange，由调用方自己清。
    */
   rekey: (oldKey: string, newKey: string, language?: string) => void
+  /**
+   * 把某个 key 对应的 model 已有的一段位置亮出来（跳定义落点用）。
+   * 只对「已经开着的 model」生效：切换动作应该由 open/switchTab 完成，
+   * 这里只负责把光标放过去并聚焦，不读盘、不建 model。
+   */
+  revealRange: (key: string, range: IRange) => void
   focus: () => void
 }
 
@@ -97,6 +103,15 @@ interface EditorProps {
   onNewFile?: () => void
   /** 光标位置或 model（切换文件）变化时上报当前光标 + 缩进，驱动状态栏 */
   onCursorStatus?: (status: CursorStatus) => void
+  /**
+   * 「跳定义」落到了另一个文件上（F12 / Cmd+Click）。key 是目标文件的 model key，
+   * selection 是目标位置（可能没有，比如只知道文件不知道行）。返回 true 表示已经处理、
+   * 编辑器不必再做别的；false 交给 Monaco 的默认行为（打开只读的临时 model）。
+   *
+   * 之所以要回到 App：打开一个文件不只是 setModel —— 还要读盘、拿 handle、进 tabs、
+   * 清 Console 那一套，全在 openLocalFile 里。Editor 只认 model，不认识「文件」。
+   */
+  onOpenDefinition?: (key: string, selection?: IRange) => boolean | Promise<boolean>
 }
 
 /**
@@ -130,7 +145,7 @@ function editorOptions(s: EditorSettings): MonacoEditorType.IEditorOptions {
 }
 
 const Editor = forwardRef<EditorHandle, EditorProps>(
-  ({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus }, ref) => {
+  ({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus, onOpenDefinition }, ref) => {
   const editorRef = useRef<MonacoEditorType.IStandaloneCodeEditor | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const modelsRef = useRef(new Map<string, ModelRecord>())
@@ -146,8 +161,8 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
 
   // 回调走 ref：Monaco 命令和 window 监听都只注册一次，
   // 直接闭包捕获 prop 会永远调用首次渲染那一版
-  const callbacksRef = useRef({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus })
-  callbacksRef.current = { onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus }
+  const callbacksRef = useRef({ onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus, onOpenDefinition })
+  callbacksRef.current = { onDirtyChange, onChange, onSave, onRun, onStop, onCloseTab, onNewFile, onCursorStatus, onOpenDefinition }
 
   // 创建 effect 刻意不依赖主题，用 ref 读当前值 —— 主题变化由下面的 effect 增量应用，
   // 放进依赖数组会让编辑器被重建
@@ -328,6 +343,18 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
         evict()
       },
 
+      revealRange: (key, range) => {
+        const editor = editorRef.current
+        const rec = modelsRef.current.get(key)
+        // 只处理已经开着的 model，且必须已经是当前挂上去的那个 ——
+        // 「切到哪个文件」是 open / switchTab 的职责，它们会同步 App 的 activeKey。
+        // 这里若自己 setModel，Editor 内部的 activeKeyRef 就和 App 的 activeKey 对不上了。
+        if (!editor || !rec || editor.getModel() !== rec.model) return
+        editor.setSelection(range)
+        // 定义在视野外才滚动，并且滚到居中：和 Monaco 自己的跳定义行为一致
+        editor.revealRangeInCenterIfOutsideViewport(range, monaco.editor.ScrollType.Smooth)
+      },
+
       focus: () => editorRef.current?.focus(),
     }
   }, [])
@@ -368,6 +395,41 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
       callbacksRef.current.onNewFile?.()
     })
 
+    /*
+      跳定义（F12 / Cmd+Click）落到别的文件时，把 Monaco 领到我们自己的「打开文件」流程上。
+
+      为什么必须插手：跨文件的类型信息由 lib/project-index.ts 用 addExtraLib 喂进语言服务，
+      所以语言服务算得出定义在哪个文件，还会用 extraLib 的内容现造一个 model —— 但那个 model
+      只在语言服务手里，编辑器实例不知道它，界面上什么都不会发生（Monaco 默认对非当前 model
+      一声不吭）。registerEditorOpener 就是官方给这个场景留的口子。
+
+      只认 `inmemory://scrawl/local:…`（本地目录里的文件）：未命名 / 内置示例的 key 不是这个
+      前缀，language service 也不会指向它们；`.d.ts` 之类的库文件则不在我们的索引里。
+      这些一律返回 false，交回 Monaco 的默认行为（在内置的只读 model 里打开）。
+
+      返回值是 Promise：解析路径要读盘（候选逐个探测），Monaco 会等。
+    */
+    const opener = monaco.editor.registerEditorOpener({
+      async openCodeEditor(_source, resource, selectionOrPosition) {
+        const target = keyOfUri(resource)
+        // 只接管本地目录里的文件
+        if (!target?.startsWith('local:')) return false
+        // selectionOrPosition 可能是 IRange 也可能是 IPosition，统一成 range 传下去
+        const selection =
+          selectionOrPosition && 'endLineNumber' in selectionOrPosition
+            ? selectionOrPosition
+            : selectionOrPosition
+              ? {
+                  startLineNumber: selectionOrPosition.lineNumber,
+                  startColumn: selectionOrPosition.column,
+                  endLineNumber: selectionOrPosition.lineNumber,
+                  endColumn: selectionOrPosition.column,
+                }
+              : undefined
+        return (await callbacksRef.current.onOpenDefinition?.(target, selection)) ?? false
+      },
+    })
+
     // 状态栏的「Ln, Col / 缩进」：光标动了或换 model 就上报一次。缩进配置在 model 上
     // （Monaco 会按文件内容自动推断空格 / Tab 和宽度），随 model 一起读即可。
     const reportStatus = () => {
@@ -395,6 +457,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(
     return () => {
       window.removeEventListener('resize', handleResize)
       handleResize.cancel()
+      opener.dispose()
       editor.dispose()
       editorRef.current = null
       for (const [key, rec] of models) {
